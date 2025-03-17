@@ -1,0 +1,22 @@
+version: '3'
+
+services:
+  opc-gateway:
+    build: .
+    container_name: opc-gateway
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      - OPC_ENDPOINT=opc.tcp://127.0.0.1:4840
+      - OPC_SECURITY_MODE=1
+      - OPC_SECURITY_POLICY=None
+      - OPC_NAMESPACE=2
+      - SERVER_PORT=3000
+      - LOG_LEVEL=info
+      - LOG_FILE_ERROR=/logs/error.log
+      - LOG_FILE_COMBINED=/logs/combined.log
+      - LOG_TO_CONSOLE=true
+    volumes:
+      - ./logs:/usr/src/app/logs
+    restart: unless-stopped
