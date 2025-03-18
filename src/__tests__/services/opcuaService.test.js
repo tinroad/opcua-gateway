@@ -1,12 +1,9 @@
-// opcuaService.test.js
-// Mockear el logger antes de cualquier otra cosa
 jest.mock('../../utils/logger', () => ({
   info: jest.fn(),
   error: jest.fn(),
   warn: jest.fn()
 }));
 
-// Definir mockSession y mockClient
 const mockSession = {
   read: jest.fn(),
   write: jest.fn(),
@@ -20,7 +17,6 @@ const mockClient = {
   on: jest.fn()
 };
 
-// Usar doMock en lugar de mock
 jest.doMock('node-opcua', () => {
   return {
     OPCUAClient: {
@@ -47,13 +43,11 @@ jest.doMock('node-opcua', () => {
   };
 });
 
-// Importar después de configurar los mocks
 const opcuaService = require('../../services/opcuaService');
 
 describe('OPCUAService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Resetear el estado del servicio
     opcuaService.clientPool = null;
     opcuaService.sessionPool = null;
   });
@@ -67,7 +61,6 @@ describe('OPCUAService', () => {
     });
   });
 
-  // El resto del código de prueba sin cambios...
   describe('writeValues', () => {
     it('Must write values correctly', async () => {
       opcuaService.sessionPool = mockSession;
