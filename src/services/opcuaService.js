@@ -9,6 +9,7 @@ class OPCUAService {
     this.connectionRetries = 0;
     this.MAX_RETRIES = CONFIG.CONNECTION_RETRY_MAX;
     this.RETRY_DELAY = CONFIG.CONNECTION_RETRY_DELAY;
+    this.isReconnecting = false;
   }
 
   async initOPCUAClient () {
@@ -26,11 +27,15 @@ class OPCUAService {
         connectionStrategy: {
           initialDelay: CONFIG.CONNECTION_INITIAL_DELAY,
           maxRetry: CONFIG.CONNECTION_MAX_RETRY,
-          maxDelay: CONFIG.CONNECTION_MAX_DELAY
+          maxDelay: CONFIG.CONNECTION_MAX_DELAY,
+          randomisationFactor: 0.1
         },
         securityMode: CONFIG.OPC_SECURITY_MODE,
         securityPolicy: CONFIG.OPC_SECURITY_POLICY,
-        endpointMustExist: true
+        endpointMustExist: true,
+        keepSessionAlive: true,
+        requestedSessionTimeout: 60000, // 1 minuto
+        keepaliveInterval: 10000        // 10 segundos
       };
 
       // Add certificate configuration only if using a security mode that requires it
@@ -46,18 +51,35 @@ class OPCUAService {
 
       const client = OPCUAClient.create(clientOptions);
 
+      // Mejorado el manejo de eventos de conexión
       client.on("backoff", (retry, delay) => {
         logger.warn(`Retrying connection to ${CONFIG.OPC_ENDPOINT}. Attempt ${retry}, delay ${delay}ms`);
       });
 
-      client.on("connection_lost", () => {
+      client.on("connection_lost", async () => {
         logger.error("OPC UA connection lost. Restarting client...");
-        this.clientPool = null;
-        this.sessionPool = null;
+        if (!this.isReconnecting) {
+          this.isReconnecting = true;
+          try {
+            await this.closeConnections();
+            this.clientPool = null;
+            this.sessionPool = null;
+            await this.initOPCUAClient();
+          } catch (error) {
+            logger.error(`Error during reconnection: ${error.message}`);
+          } finally {
+            this.isReconnecting = false;
+          }
+        }
       });
 
       client.on("connection_reestablished", () => {
         logger.info("OPC UA connection reestablished");
+        this.connectionRetries = 0;
+      });
+
+      client.on("keepalive", () => {
+        logger.debug("OPC UA keepalive received");
       });
 
       await client.connect(CONFIG.OPC_ENDPOINT);
