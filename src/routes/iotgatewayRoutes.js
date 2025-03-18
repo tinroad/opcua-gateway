@@ -61,4 +61,36 @@ router.get('/read', async (req, res) => {
   }
 });
 
+// Write endpoint
+router.post('/write', async (req, res) => {
+  try {
+    const writeData = req.body;
+
+    // Basic validation
+    if (!writeData || !Array.isArray(writeData)) {
+      return res.status(400).json({
+        error: "The request body must be an array of values to write"
+      });
+    }
+
+    // Validate structure of each element
+    for (const item of writeData) {
+      if (!item.id || !('value' in item)) {
+        return res.status(400).json({
+          error: "Each element must have 'id' and 'value'"
+        });
+      }
+    }
+
+    const writeResults = await opcuaService.writeValues(writeData);
+
+    res.json({ writeResults });
+  } catch (error) {
+    logger.error('Error in write operation:', error);
+    res.status(500).json({
+      error: "Error processing write operation"
+    });
+  }
+});
+
 module.exports = router; 

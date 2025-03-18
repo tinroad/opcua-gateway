@@ -1,4 +1,4 @@
-const { OPCUAClient } = require("node-opcua");
+const { OPCUAClient, AttributeIds, DataType } = require('node-opcua');
 const CONFIG = require('../config/config');
 const logger = require('../utils/logger');
 
@@ -176,6 +176,93 @@ class OPCUAService {
     if (this.clientPool) await this.clientPool.disconnect();
     this.clientPool = null;
     this.sessionPool = null;
+  }
+
+  async writeValues (writeData) {
+    try {
+      const results = [];
+
+      for (const item of writeData) {
+        const result = {
+          id: item.id,
+          s: false,
+          r: "Bad",
+          t: Date.now()
+        };
+
+        try {
+          // Detect data type
+          let dataType;
+          if (item.dataType) {
+            if (!DataType[item.dataType]) {
+              throw new Error(`Tipo de dato no válido: ${item.dataType}`);
+            }
+            dataType = DataType[item.dataType];
+          } else {
+            dataType = this.detectDataType(item.value);
+          }
+
+          await this.sessionPool.write({
+            nodeId: item.id,
+            attributeId: AttributeIds.Value,
+            value: {
+              value: {
+                dataType: dataType,
+                value: this.convertValue(item.value, dataType)
+              }
+            }
+          });
+
+          result.s = true;
+          result.r = "Good";
+        } catch (writeError) {
+          logger.error(`Error writing in ${item.id}: ${writeError.message}`);
+          result.r = `Error: ${writeError.message}`;
+        }
+
+        results.push(result);
+      }
+
+      return results;
+    } catch (error) {
+      throw new Error(`Error writing OPC UA: ${error.message}`);
+    }
+  }
+
+  detectDataType (value) {
+    switch (typeof value) {
+      case 'boolean':
+        return DataType.Boolean;
+      case 'number':
+        return Number.isInteger(value) ? DataType.Int32 : DataType.Double;
+      case 'string':
+        return DataType.String;
+      default:
+        return DataType.Variant;
+    }
+  }
+
+  convertValue (value, dataType) {
+    switch (dataType) {
+      case DataType.UInt16:
+        return parseInt(value);
+      case DataType.Int16:
+        return parseInt(value);
+      case DataType.UInt32:
+        return parseInt(value);
+      case DataType.Int32:
+        return parseInt(value);
+      case DataType.Float:
+        return parseFloat(value);
+      case DataType.Double:
+        return parseFloat(value);
+      case DataType.Boolean:
+        return Boolean(value);
+      case DataType.String:
+        return String(value);
+      default:
+        return value;
+    }
   }
 }
 

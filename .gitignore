@@ -22,6 +22,7 @@ Thumbs.db
 # IDEs y editores
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 *.swn
