@@ -12,14 +12,25 @@ const cors = require('cors');
 const morgan = require('morgan');
 const opcuaRoutes = require('./routes/opcuaRoutes');
 const errorHandler = require('./middleware/errorHandler');
+const helmet = require('helmet');
+const corsOptions = require('./config/corsConfig');
+const rateLimiter = require('./middleware/rateLimiter');
+const combinedAuth = require('./middleware/combinedAuth');
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// Security Middleware
+app.use(helmet());
+app.use(cors(corsOptions));
+app.use(rateLimiter);
+
+// Basic Middleware
 app.use(express.json());
 app.use(morgan('combined', { stream: logger.stream }));
 app.use(requestLogger);
+
+// Authentication Middleware
+app.use('/iotgateway', combinedAuth);
 
 // Routes
 app.use('/iotgateway', iotgatewayRoutes);
