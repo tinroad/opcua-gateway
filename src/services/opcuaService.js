@@ -183,38 +183,47 @@ class OPCUAService {
       const results = [];
 
       for (const item of writeData) {
+        const { id, value, dataType } = item;
+
         const result = {
-          id: item.id,
+          id: id,
           s: false,
           r: "Bad",
+          v: value,
           t: Date.now()
         };
 
         try {
           // Detect data type
-          let dataType;
-          if (item.dataType) {
-            if (!DataType[item.dataType]) {
-              throw new Error(`Tipo de dato no válido: ${item.dataType}`);
-            }
-            dataType = DataType[item.dataType];
-          } else {
-            dataType = this.detectDataType(item.value);
-          }
+          if (!dataType)
+            throw new Error("Data type not specified");
+          if (!DataType[dataType])
+            throw new Error(`Invalid data type: ${dataType}`);
 
-          await this.sessionPool.write({
-            nodeId: item.id,
+          const writeResult = await this.sessionPool.write({
+            nodeId: id,
             attributeId: AttributeIds.Value,
             value: {
               value: {
                 dataType: dataType,
-                value: this.convertValue(item.value, dataType)
+                value: this.convertValue(value, dataType)
               }
             }
           });
 
-          result.s = true;
-          result.r = "Good";
+          if (writeResult.name !== "Good") {
+            logger.warn(`Error writing in ${item.id}: ${writeResult.description}`);
+            result.s = false;
+            result.r = `Error: ${writeResult.description}`;
+            result.v = writeResult.value;
+
+          } else {
+            logger.info(`Write in ${item.id} completed successfully`);
+            result.s = true;
+            result.r = "Good";
+            result.v = writeResult.value;
+          }
+
         } catch (writeError) {
           logger.error(`Error writing in ${item.id}: ${writeError.message}`);
           result.r = `Error: ${writeError.message}`;

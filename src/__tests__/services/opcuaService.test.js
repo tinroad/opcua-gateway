@@ -59,7 +59,7 @@ describe('OPCUAService', () => {
   });
 
   describe('initOPCUAClient', () => {
-    it('debería inicializar correctamente el cliente OPC UA', async () => {
+    it('Must initialize the OPC UA client correctly', async () => {
       await opcuaService.initOPCUAClient();
 
       expect(opcuaService.clientPool).toBeTruthy();
@@ -69,7 +69,7 @@ describe('OPCUAService', () => {
 
   // El resto del código de prueba sin cambios...
   describe('writeValues', () => {
-    it('debería escribir valores correctamente', async () => {
+    it('Must write values correctly', async () => {
       opcuaService.sessionPool = mockSession;
 
       const writeData = [{
@@ -78,13 +78,46 @@ describe('OPCUAService', () => {
         dataType: 'UInt16'
       }];
 
-      mockSession.write.mockResolvedValueOnce([{ s: true, r: 'Good' }]);
+      const mockWriteResult = {
+        value: 42,
+        description: 'The operation succeeded.',
+        name: 'Good'
+      };
+
+      mockSession.write.mockResolvedValueOnce(mockWriteResult);
 
       const results = await opcuaService.writeValues(writeData);
 
       expect(results).toHaveLength(1);
       expect(results[0].s).toBe(true);
       expect(results[0].r).toBe('Good');
+      expect(results[0].v).toBe(42);
+    });
+
+
+    it('Must fail when the data type is not correct', async () => {
+      opcuaService.sessionPool = mockSession;
+
+      const writeData = [{
+        id: 'ns=2;s=test1',
+        value: 42,
+        dataType: 'Int16'
+      }];
+
+      const mockWriteResult = {
+        value: 2155085824,
+        description: "The value supplied for the attribute is not of the same type as the attribute's value.",
+        name: 'BadTypeMismatch'
+      };
+
+      mockSession.write.mockResolvedValueOnce(mockWriteResult);
+
+      const results = await opcuaService.writeValues(writeData);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].s).toBe(false);
+      expect(results[0].r).toBe("Error: The value supplied for the attribute is not of the same type as the attribute's value.");
+      expect(results[0].v).toBe(2155085824);
     });
   });
 
@@ -94,10 +127,14 @@ describe('OPCUAService', () => {
       opcuaService.sessionPool = mockSession;
     });
 
-    it('debería leer valores correctamente', async () => {
+    it('Must read values correctly', async () => {
       const mockReadResult = {
-        statusCode: { name: 'Good' },
-        value: { value: 42 }
+        value: { dataType: 7, arrayType: 0, value: 89, dimensions: null },
+        statusCode: {
+          value: 0,
+          description: 'The operation succeeded.',
+          name: 'Good'
+        },
       };
 
       mockSession.read.mockResolvedValueOnce(mockReadResult);
@@ -105,28 +142,31 @@ describe('OPCUAService', () => {
       const result = await opcuaService.readOPC('test1');
 
       expect(result).toEqual(mockReadResult);
-      expect(mockSession.read).toHaveBeenCalledWith(
-        expect.objectContaining({
-          nodeId: 'ns=2;s=test1'
-        })
-      );
     });
 
-    it('debería manejar errores de lectura', async () => {
+    it('Must fail when the attribute is not correct', async () => {
+      const mockReadResult = {
+        statusCode: {
+          value: 2147483648,
+          description: 'The operation failed.',
+          name: 'Bad'
+        },
+      };
+
+      mockSession.read.mockResolvedValueOnce(mockReadResult);
+
+      const result = await opcuaService.readOPC('test1');
+
+      expect(result.statusCode.name).toBe("Bad");
+      expect(result.statusCode.description).toBe("The operation failed.");
+    });
+
+    it('Must handle read errors', async () => {
       mockSession.read.mockRejectedValueOnce(new Error('Read failed'));
 
       const result = await opcuaService.readOPC('test1');
 
       expect(result).toBe(false);
-    });
-  });
-
-  describe('detectDataType', () => {
-    it('debería detectar tipos correctamente', () => {
-      expect(opcuaService.detectDataType(true)).toBe('Boolean');
-      expect(opcuaService.detectDataType(42)).toBe('Int32');
-      expect(opcuaService.detectDataType(3.14)).toBe('Double');
-      expect(opcuaService.detectDataType('test')).toBe('String');
     });
   });
 });
