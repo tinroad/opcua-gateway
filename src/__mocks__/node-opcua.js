@@ -1,12 +1,12 @@
 const mockSession = {
   read: jest.fn(),
   write: jest.fn(),
-  close: jest.fn()
+  close: jest.fn().mockResolvedValue()
 };
 
 const mockClient = {
-  connect: jest.fn(),
-  disconnect: jest.fn(),
+  connect: jest.fn().mockResolvedValue(),
+  disconnect: jest.fn().mockResolvedValue(),
   createSession: jest.fn().mockResolvedValue(mockSession),
   on: jest.fn()
 };

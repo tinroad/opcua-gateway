@@ -172,10 +172,23 @@ class OPCUAService {
   }
 
   async closeConnections () {
-    if (this.sessionPool) await this.sessionPool.close();
-    if (this.clientPool) await this.clientPool.disconnect();
-    this.clientPool = null;
-    this.sessionPool = null;
+    try {
+      logger.info('Closing OPC UA connections');
+
+      if (this.sessionPool)
+        await this.sessionPool.close();
+
+      if (this.clientPool)
+        await this.clientPool.disconnect();
+
+      logger.info('OPC UA connections closed');
+    } catch (error) {
+      logger.error(`Error general en closeConnections: ${error.message}`);
+      throw error;
+    } finally {
+      this.sessionPool = null;
+      this.clientPool = null;
+    }
   }
 
   async writeValues (writeData) {

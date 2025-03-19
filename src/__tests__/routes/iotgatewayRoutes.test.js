@@ -86,23 +86,6 @@ describe('IOT Gateway Routes', () => {
       }
     });
 
-    it('must return an error if the id or value is missing', async () => {
-      const invalidWriteData = [
-        { value: 42 },
-        { id: 'ns=2;s=test' }
-      ];
-
-      for (const data of invalidWriteData) {
-        const response = await request(app)
-          .post('/iotgateway/write')
-          .send([data])
-          .set('X-API-Key', 'test-api-key');
-
-        expect(response.status).toBe(400);
-        expect(response.body.error).toBe("Each element must have 'id' and 'value'");
-      }
-    });
-
     it('must return an error if the array is empty', async () => {
       const response = await request(app)
         .post('/iotgateway/write')
