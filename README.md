@@ -1,6 +1,9 @@
+[Leer en español](README.es.md)
 # OPC UA Gateway
 
 Gateway for communication with OPC UA servers, implemented in Node.js.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
@@ -328,9 +331,14 @@ docker run -d \
 docker-compose up -d
 ```
 
+## Code of Conduct
+
+Please note that this project has a [Code of Conduct](CODE_OF_CONDUCT.md).
+By participating in this project, you agree to abide by its terms.
+
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Author
 
