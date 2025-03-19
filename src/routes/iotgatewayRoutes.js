@@ -15,6 +15,7 @@ router.get('/read', async (req, res) => {
     logger.info(`Processing read request for ID: ${ids}`);
 
     let opcResponse = await opcuaService.readOPC(ids);
+
     if (opcResponse === false) {
       logger.warn(`Error reading OPC UA value for ID: ${ids}`);
       return res.send({
@@ -36,7 +37,7 @@ router.get('/read', async (req, res) => {
         {
           "id": ids,
           "s": status,
-          "r": opcResponse.statusCode.name,
+          "r": opcResponse.statusCode.description,
           "v": opcResponse.value ? opcResponse.value.value : null,
           "t": Date.now()
         }
@@ -67,7 +68,7 @@ router.post('/write', async (req, res) => {
     const writeData = req.body;
 
     // Basic validation
-    if (!writeData || !Array.isArray(writeData)) {
+    if (!writeData || !Array.isArray(writeData) || writeData.length === 0) {
       return res.status(400).json({
         error: "The request body must be an array of values to write"
       });
