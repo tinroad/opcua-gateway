@@ -1,4 +1,5 @@
 [Leer en español](README.es.md)
+
 # OPC UA Gateway
 
 Gateway for communication with OPC UA servers, implemented in Node.js.
@@ -200,6 +201,132 @@ Authorization: Basic base64(username:password)
 }
 ```
 
+### Write OPC UA values
+
+```http
+POST /iotgateway/write
+Content-Type: application/json
+X-API-Key: your_api_key_here
+```
+
+#### Request Body
+
+```json
+[
+	{
+		"id": "node-id",
+		"value": "new-value"
+	}
+]
+```
+
+#### Response Format
+
+```json
+{
+	"writeResults": [
+		{
+			"id": "node-id",
+			"success": true,
+			"message": "Value written successfully"
+		}
+	]
+}
+```
+
+### Direct OPC UA Node Reading
+
+```http
+GET /api/opcua/read/:nodeId
+```
+
+#### Response Format
+
+```json
+{
+	"nodeId": "ns=2;s=MyVariable",
+	"value": "value-data"
+}
+```
+
+### Direct OPC UA Node Writing
+
+```http
+POST /api/opcua/write/:nodeId
+Content-Type: application/json
+```
+
+#### Request Body
+
+```json
+{
+	"value": "new-value"
+}
+```
+
+#### Response Format
+
+```json
+{
+	"nodeId": "ns=2;s=MyVariable",
+	"message": "Value written successfully"
+}
+```
+
+### OPC UA Connection Status
+
+```http
+GET /api/opcua/status
+```
+
+#### Response Format
+
+```json
+{
+	"connected": true,
+	"endpoint": "opc.tcp://127.0.0.1:4840",
+	"lastConnection": "2023-03-15T14:30:45.123Z"
+}
+```
+
+### Health Check
+
+```http
+GET /health
+```
+
+No authentication required for this endpoint.
+
+#### Response
+
+```json
+{
+	"status": "UP",
+	"opcClient": "CONNECTED",
+	"opcEndpoint": "opc.tcp://127.0.0.1:4840",
+	"time": 1647123456789
+}
+```
+
+### Configuration (Development Only)
+
+```http
+GET /config
+```
+
+Available only in development mode.
+
+#### Response
+
+```json
+{
+	"OPC_ENDPOINT": "opc.tcp://*****@127.0.0.1:4840",
+	"SERVER_PORT": 3000,
+	"LOG_LEVEL": "info"
+	// Other configuration values (sensitive information hidden)
+}
+```
+
 #### Error Responses
 
 1. Authentication Failed:
@@ -223,25 +350,6 @@ Authorization: Basic base64(username:password)
 ```json
 {
 	"error": "Too many requests from this IP, please try again later"
-}
-```
-
-### Health Check
-
-```http
-GET /health
-```
-
-No authentication required for this endpoint.
-
-#### Response
-
-```json
-{
-	"status": "UP",
-	"opcClient": "CONNECTED",
-	"opcEndpoint": "opc.tcp://127.0.0.1:4840",
-	"time": 1647123456789
 }
 ```
 

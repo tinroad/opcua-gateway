@@ -1,4 +1,5 @@
 [Read this in English](README.md)
+
 # Gateway OPC UA
 
 Gateway para la comunicación con servidores OPC UA, implementado en Node.js.
@@ -21,8 +22,7 @@ Gateway para la comunicación con servidores OPC UA, implementado en Node.js.
 - Protección CORS
 - Encabezados de seguridad (Helmet)
 
-## Estructura del Proyecto 
-
+## Estructura del Proyecto
 
 ```
 project/
@@ -181,7 +181,7 @@ GET /iotgateway/read?ids=<node-id>
 Authorization: Basic base64(username:password)
 ```
 
-#### Parámetros de Solicitud
+#### Parámetros de la Solicitud
 
 - `ids`: ID del nodo o lista de IDs de nodos separados por comas para leer
 
@@ -198,6 +198,132 @@ Authorization: Basic base64(username:password)
 			"t": 1647123456789 // Marca de tiempo
 		}
 	]
+}
+```
+
+### Escribir valores OPC UA
+
+```http
+POST /iotgateway/write
+Content-Type: application/json
+X-API-Key: your_api_key_here
+```
+
+#### Cuerpo de la Solicitud
+
+```json
+[
+	{
+		"id": "node-id",
+		"value": "nuevo-valor"
+	}
+]
+```
+
+#### Formato de Respuesta
+
+```json
+{
+	"writeResults": [
+		{
+			"id": "node-id",
+			"success": true,
+			"message": "Valor escrito exitosamente"
+		}
+	]
+}
+```
+
+### Lectura Directa de Nodos OPC UA
+
+```http
+GET /api/opcua/read/:nodeId
+```
+
+#### Formato de Respuesta
+
+```json
+{
+	"nodeId": "ns=2;s=MiVariable",
+	"value": "datos-valor"
+}
+```
+
+### Escritura Directa de Nodos OPC UA
+
+```http
+POST /api/opcua/write/:nodeId
+Content-Type: application/json
+```
+
+#### Cuerpo de la Solicitud
+
+```json
+{
+	"value": "nuevo-valor"
+}
+```
+
+#### Formato de Respuesta
+
+```json
+{
+	"nodeId": "ns=2;s=MiVariable",
+	"message": "Valor escrito exitosamente"
+}
+```
+
+### Estado de Conexión OPC UA
+
+```http
+GET /api/opcua/status
+```
+
+#### Formato de Respuesta
+
+```json
+{
+	"connected": true,
+	"endpoint": "opc.tcp://127.0.0.1:4840",
+	"lastConnection": "2023-03-15T14:30:45.123Z"
+}
+```
+
+### Verificación de Estado
+
+```http
+GET /health
+```
+
+No se requiere autenticación para este endpoint.
+
+#### Respuesta
+
+```json
+{
+	"status": "UP",
+	"opcClient": "CONNECTED",
+	"opcEndpoint": "opc.tcp://127.0.0.1:4840",
+	"time": 1647123456789
+}
+```
+
+### Configuración (Solo en Desarrollo)
+
+```http
+GET /config
+```
+
+Disponible solo en modo desarrollo.
+
+#### Respuesta
+
+```json
+{
+	"OPC_ENDPOINT": "opc.tcp://*****@127.0.0.1:4840",
+	"SERVER_PORT": 3000,
+	"LOG_LEVEL": "info"
+	// Otros valores de configuración (información sensible oculta)
 }
 ```
 
@@ -224,25 +350,6 @@ Authorization: Basic base64(username:password)
 ```json
 {
 	"error": "Demasiadas solicitudes desde esta IP, por favor intente de nuevo más tarde"
-}
-```
-
-### Verificación de Estado
-
-```http
-GET /health
-```
-
-No se requiere autenticación para este endpoint.
-
-#### Respuesta
-
-```json
-{
-	"status": "UP",
-	"opcClient": "CONNECTED",
-	"opcEndpoint": "opc.tcp://127.0.0.1:4840",
-	"time": 1647123456789
 }
 ```
 
@@ -343,4 +450,4 @@ Este proyecto está licenciado bajo la Licencia MIT - consulte el archivo [LICEN
 
 ## Autor
 
-Diego Morales 
+Diego Morales
