@@ -1,7 +1,7 @@
 module.exports = {
   testEnvironment: 'node',
-  verbose: true,
-  collectCoverage: true,
+  verbose: false,
+  collectCoverage: false,
   coverageDirectory: 'coverage',
   coveragePathIgnorePatterns: [
     '/node_modules/',

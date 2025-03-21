@@ -1,3 +1,9 @@
+jest.mock('../../utils/logger', () => ({
+  info: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn()
+}));
+
 const request = require('supertest');
 const express = require('express');
 const router = require('../../routes/iotgatewayRoutes');
