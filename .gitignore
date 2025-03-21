@@ -48,3 +48,8 @@ coverage/
 .npm/
 .eslintcache
 .node_repl_history
+
+# Husky
+.husky/_
+!.husky/commit-msg
+!.husky/pre-commit

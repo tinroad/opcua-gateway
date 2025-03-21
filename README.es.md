@@ -444,6 +444,37 @@ docker-compose up -d
 Tenga en cuenta que este proyecto tiene un [Código de Conducta](CODE_OF_CONDUCT.md).
 Al participar en este proyecto, acepta cumplir con sus términos.
 
+## Contribuir
+
+Este proyecto utiliza [Commits Convencionales](https://www.conventionalcommits.org/) para los mensajes de commit. Esto nos permite generar automáticamente registros de cambios y determinar la próxima versión.
+
+El formato para los mensajes de commit es:
+
+```
+<tipo>(<ámbito>): <descripción>
+
+[cuerpo opcional]
+
+[footer(s) opcional(es)]
+```
+
+Donde `<tipo>` es uno de:
+
+- **feat**: Una nueva característica
+- **fix**: Una corrección de error
+- **docs**: Cambios solo en la documentación
+- **style**: Cambios que no afectan el significado del código
+- **refactor**: Un cambio de código que no corrige un error ni añade una característica
+- **perf**: Un cambio de código que mejora el rendimiento
+- **test**: Añadir pruebas faltantes o corregir pruebas existentes
+- **build**: Cambios en el sistema de construcción o dependencias externas
+- **ci**: Cambios en los archivos y scripts de configuración de CI
+- **chore**: Otros cambios que no modifican los archivos src o test
+- **revert**: Revierte un commit anterior
+- **config**: Cambios en los archivos de configuración
+
+Para más detalles, por favor consulte el archivo [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Licencia
 
 Este proyecto está licenciado bajo la Licencia MIT - consulte el archivo [LICENSE](LICENSE) para obtener detalles.
