@@ -5,8 +5,8 @@
 	"main": "src/server.js",
 	"scripts": {
 		"prepare": "husky",
-		"start": "node src/app.js",
-		"dev": "nodemon src/app.js",
+		"start": "node src/server.js",
+		"dev": "nodemon src/server.js",
 		"test": "jest",
 		"test:watch": "jest --watch",
 		"test:coverage": "jest --coverage",

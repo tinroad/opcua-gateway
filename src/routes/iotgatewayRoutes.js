@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const opcuaService = require('../services/opcuaService');
 const logger = require('../utils/logger');
+const CONFIG = require('../config/config');
 
 router.get('/read', async (req, res) => {
   try {
@@ -14,10 +15,12 @@ router.get('/read', async (req, res) => {
 
     logger.info(`Processing read request for ID: ${ids}`);
 
-    let opcResponse = await opcuaService.readOPC(ids);
+    // Formatear el nodeId con el namespace por defecto
+    const fullNodeId = `ns=${CONFIG.OPC_NAMESPACE};s=${ids}`;
+    let opcResponse = await opcuaService.readOPC(fullNodeId);
 
     if (opcResponse === false) {
-      logger.warn(`Error reading OPC UA value for ID: ${ids}`);
+      logger.warn(`Error reading OPC UA value for ID: ${fullNodeId}`);
       return res.send({
         "readResults": [
           {
@@ -83,7 +86,13 @@ router.post('/write', async (req, res) => {
       }
     }
 
-    const writeResults = await opcuaService.writeValues(writeData);
+    // Formatear los nodeIds con el namespace por defecto
+    const formattedWriteData = writeData.map(item => ({
+      ...item,
+      id: `ns=${CONFIG.OPC_NAMESPACE};s=${item.id}`
+    }));
+
+    const writeResults = await opcuaService.writeValues(formattedWriteData);
 
     res.json({ writeResults });
   } catch (error) {

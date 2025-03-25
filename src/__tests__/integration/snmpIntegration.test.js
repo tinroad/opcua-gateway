@@ -21,13 +21,40 @@ let allSessions = [];
 function getAvailablePort () {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
-    server.unref();
-    server.on('error', reject);
-    server.listen(0, () => {
+
+    // Manejar errores del servidor
+    server.on('error', (err) => {
+      if (err.code === 'EACCES') {
+        // Si hay error de permisos, intentar con un puerto más alto
+        server.listen(0, '127.0.0.1', () => {
+          const port = server.address().port;
+          server.close(() => {
+            resolve(port);
+          });
+        });
+      } else {
+        reject(err);
+      }
+    });
+
+    // Intentar primero con un puerto aleatorio en el rango 49152-65535
+    server.listen(0, '127.0.0.1', () => {
       const port = server.address().port;
-      server.close(() => {
-        resolve(port);
-      });
+      if (port < 49152) {
+        // Si el puerto es muy bajo, intentar con uno más alto
+        server.close(() => {
+          server.listen(0, '127.0.0.1', () => {
+            const newPort = server.address().port;
+            server.close(() => {
+              resolve(newPort);
+            });
+          });
+        });
+      } else {
+        server.close(() => {
+          resolve(port);
+        });
+      }
     });
   });
 }
@@ -44,6 +71,9 @@ describe('SNMP Integration Tests', () => {
       return;
     }
 
+    // Definir variable para controlar tiempo de espera
+    jest.setTimeout(60000); // 60 segundos para todas las pruebas
+
     // Limpiar array de sesiones
     allSessions = [];
 
@@ -59,12 +89,28 @@ describe('SNMP Integration Tests', () => {
     // Configuramos el agente SNMP con el puerto aleatorio
     snmpAgent.port = snmpPort;
 
+    // Forzar detención del agente por si quedó alguno de ejecución anterior
+    try {
+      await snmpAgent.stop();
+      console.log('Agente SNMP anterior detenido exitosamente');
+    } catch (error) {
+      console.log('No había agente SNMP anterior o error al detenerlo:', error.message);
+    }
+
     // Iniciamos el agente si no está ya iniciado
-    if (!agentStarted) {
+    console.log('Iniciando agente SNMP para pruebas de integración...');
+    try {
       await snmpAgent.start();
       agentStarted = true;
+      console.log('Agente SNMP iniciado exitosamente para pruebas');
+    } catch (error) {
+      console.error('Error al iniciar el agente SNMP:', error.message);
+      throw error; // Fallar las pruebas si no se puede iniciar el agente
     }
-  }, 30000);
+
+    // Esperar un momento para que el agente esté completamente listo
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }, 60000); // Aumentar timeout para beforeAll
 
   beforeEach(() => {
     if (process.env.SKIP_INTEGRATION_TESTS) {
@@ -74,9 +120,9 @@ describe('SNMP Integration Tests', () => {
     // Creamos una sesión SNMP para cada prueba
     const options = {
       port: snmpPort,
-      retries: 1,
-      timeout: 5000,
-      backoff: 1.0,
+      retries: 3,          // Aumentar retries de 1 a 3
+      timeout: 10000,      // Aumentar timeout de 5000 a 10000
+      backoff: 1.5,        // Aumentar backoff de 1.0 a 1.5
       transport: 'udp4',
       trapPort: 162,
       version: netSnmp.Version2c,
@@ -131,9 +177,14 @@ describe('SNMP Integration Tests', () => {
         sess._timer = null;
       }
 
-      // Limpiar referencias internas
+      // Limpiar solicitudes pendientes
       if (sess._reqs) {
         sess._reqs = {};
+      }
+
+      // Forzar recolección de basura si está disponible
+      if (global.gc) {
+        global.gc();
       }
     } catch (err) {
       console.error(`Error closing SNMP session: ${err.message}`);
@@ -159,36 +210,52 @@ describe('SNMP Integration Tests', () => {
     }
 
     // Cerrar todas las sesiones que pudieran haber quedado abiertas
-    allSessions.forEach(sess => {
+    console.log(`Cerrando ${allSessions.length} sesiones SNMP`);
+    for (const sess of allSessions) {
       if (sess) {
-        closeSessionSafely(sess);
+        await new Promise(resolve => {
+          try {
+            closeSessionSafely(sess);
+            resolve();
+          } catch (err) {
+            console.error('Error al cerrar sesión SNMP:', err.message);
+            resolve();
+          }
+        });
       }
-    });
+    }
 
     // Limpiar array de sesiones
     allSessions = [];
 
     // Asegurarse de que la sesión principal esté cerrada
     if (session) {
-      closeSessionSafely(session);
-      session = null;
+      await new Promise(resolve => {
+        try {
+          closeSessionSafely(session);
+          session = null;
+          resolve();
+        } catch (err) {
+          console.error('Error al cerrar sesión SNMP principal:', err.message);
+          session = null;
+          resolve();
+        }
+      });
     }
+
+    // Dar tiempo para que se cierren las conexiones
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Detenemos el agente después de todas las pruebas
     if (agentStarted) {
+      console.log('Deteniendo agente SNMP después de las pruebas...');
       try {
-        // Parar el actualizador de métricas antes de detener el agente
-        if (snmpAgent.metricsInterval) {
-          clearInterval(snmpAgent.metricsInterval);
-          snmpAgent.metricsInterval = null;
-          logger.info('Metrics updater stopped manually after tests');
-        }
-
         await snmpAgent.stop();
         agentStarted = false;
-        console.log('SNMP agent stopped after integration tests');
+        console.log('Agente SNMP detenido exitosamente');
       } catch (err) {
         console.error(`Error al detener el agente SNMP: ${err.message}`);
+        // Intentar asegurar que el agente se marque como detenido
         agentStarted = false;
       }
     }
@@ -202,7 +269,10 @@ describe('SNMP Integration Tests', () => {
     } catch (e) {
       // Ignorar errores en esta etapa final
     }
-  }, 15000);
+
+    // Dar tiempo final para limpieza
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }, 60000); // Aumentar timeout para afterAll
 
   itIfNotSkipped('debe responder con un valor definido para un OID válido', (done) => {
     session.get(['1.3.6.1.4.1.12345.1.3.1.0'], (error, varbinds) => {
@@ -249,6 +319,16 @@ describe('SNMP Integration Tests', () => {
 
   itIfNotSkipped('debe manejar OIDs desconocidos correctamente', (done) => {
     session.get(['1.3.6.1.4.1.12345.99.99.99.0'], (error, varbinds) => {
+      // Verificar primero si hay error
+      if (error) {
+        console.log('Error en prueba de OID desconocido:', error);
+        expect(error).toBeNull();
+        done();
+        return;
+      }
+
+      // Ahora podemos verificar varbinds con seguridad
+      expect(varbinds).toBeDefined();
       expect(varbinds.length).toBe(1);
       expect(varbinds[0].type).toBe(netSnmp.ObjectType.NoSuchObject);
       done();

@@ -25,21 +25,22 @@ const app = express();
 // Security Middleware
 app.use(helmet());
 app.use(cors(corsOptions));
-app.use(rateLimiter);
-
-// Basic Middleware
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined', { stream: logger.stream }));
-app.use(requestLogger);
 app.use(metricsMiddleware);
 
-// Authentication Middleware
-app.use('/iotgateway', combinedAuth);
+// Authentication middleware
+app.use(combinedAuth);
+
+// Rate limiting
+app.use(rateLimiter);
 
 // Routes
-app.use('/iotgateway', iotgatewayRoutes);
-app.use('/', healthRoutes);
+app.use('/api/opcua', opcuaRoutes);
+app.use('/api/iotgateway', iotgatewayRoutes);
 app.use('/api/metrics', metricsRoutes);
+app.use('/', healthRoutes);
 
 // Configuration routes only in development
 if (CONFIG.NODE_ENV !== 'production') {
@@ -49,9 +50,6 @@ if (CONFIG.NODE_ENV !== 'production') {
 // Serve static files
 app.use('/public', express.static(path.join(__dirname, '../public')));
 app.use('/public', serveIndex(path.join(__dirname, '../public')));
-
-// Routes
-app.use('/api/opcua', opcuaRoutes);
 
 // Error handling
 app.use(errorHandler);
@@ -79,22 +77,61 @@ process.on('SIGTERM', async () => {
 
   // Stop the SNMP agent if active
   if (CONFIG.ENABLE_SNMP) {
-    snmpAgent.stop();
+    try {
+      await snmpAgent.stop();
+      logger.info('SNMP agent stopped successfully');
+    } catch (err) {
+      logger.error(`Error stopping SNMP agent: ${err.message}`);
+    }
   }
 
-  await opcuaService.closeConnections();
+  try {
+    await opcuaService.closeConnections();
+    logger.info('OPC UA connections closed successfully');
+  } catch (err) {
+    logger.error(`Error closing OPC UA connections: ${err.message}`);
+  }
+
+  // Dar tiempo para que se cierren todas las conexiones
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Forzar recolección de basura si está disponible
+  if (global.gc) {
+    global.gc();
+  }
+
   process.exit(0);
 });
 
+// Manejar también SIGINT (Ctrl+C)
 process.on('SIGINT', async () => {
   logger.info('SIGINT signal received, closing server...');
 
-  // Detener el agente SNMP si está activo
+  // Stop the SNMP agent if active
   if (CONFIG.ENABLE_SNMP) {
-    snmpAgent.stop();
+    try {
+      await snmpAgent.stop();
+      logger.info('SNMP agent stopped successfully');
+    } catch (err) {
+      logger.error(`Error stopping SNMP agent: ${err.message}`);
+    }
   }
 
-  await opcuaService.closeConnections();
+  try {
+    await opcuaService.closeConnections();
+    logger.info('OPC UA connections closed successfully');
+  } catch (err) {
+    logger.error(`Error closing OPC UA connections: ${err.message}`);
+  }
+
+  // Dar tiempo para que se cierren todas las conexiones
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Forzar recolección de basura si está disponible
+  if (global.gc) {
+    global.gc();
+  }
+
   process.exit(0);
 });
 

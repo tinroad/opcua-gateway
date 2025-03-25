@@ -56,10 +56,28 @@ class MetricsCollector {
 
   // System - Update system metrics (CPU, memory, etc.)
   startSystemMetricsCollection () {
-    this._metricsInterval = setInterval(() => {
-      // Update system metrics every 5 seconds
-      this.updateSystemMetrics();
-    }, 5000);
+    // Si ya existe un intervalo, limpiarlo primero
+    if (this._metricsInterval) {
+      this.stopSystemMetricsCollection();
+    }
+
+    // Solo iniciar el intervalo si no estamos en modo test
+    if (process.env.NODE_ENV !== 'test') {
+      this._metricsInterval = setInterval(() => {
+        // Update system metrics every 5 seconds
+        this.updateSystemMetrics();
+      }, 5000);
+
+      // Marcar el intervalo como no bloqueante
+      if (this._metricsInterval.unref) {
+        this._metricsInterval.unref();
+      }
+
+      // Remover listeners del intervalo
+      if (this._metricsInterval.removeAllListeners) {
+        this._metricsInterval.removeAllListeners();
+      }
+    }
 
     // Update system metrics immediately
     this.updateSystemMetrics();
@@ -69,9 +87,13 @@ class MetricsCollector {
   // Detener la recolección de métricas del sistema
   stopSystemMetricsCollection () {
     if (this._metricsInterval) {
-      clearInterval(this._metricsInterval);
-      this._metricsInterval = null;
-      logger.info('System metrics collection stopped');
+      try {
+        clearInterval(this._metricsInterval);
+        this._metricsInterval = null;
+        logger.info('System metrics collection stopped');
+      } catch (err) {
+        logger.error(`Error stopping system metrics collection: ${err.message}`);
+      }
     }
   }
 
