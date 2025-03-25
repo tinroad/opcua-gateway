@@ -14,6 +14,8 @@ let agentStarted = false;
 let session;
 // Puerto aleatorio para el agente SNMP en las pruebas
 let snmpPort;
+// Mantener un array de todas las sesiones creadas para asegurar la limpieza
+let allSessions = [];
 
 // Función para encontrar un puerto disponible
 function getAvailablePort () {
@@ -42,6 +44,9 @@ describe('SNMP Integration Tests', () => {
       return;
     }
 
+    // Limpiar array de sesiones
+    allSessions = [];
+
     // Obtenemos un puerto disponible
     try {
       snmpPort = await getAvailablePort();
@@ -62,6 +67,10 @@ describe('SNMP Integration Tests', () => {
   }, 30000);
 
   beforeEach(() => {
+    if (process.env.SKIP_INTEGRATION_TESTS) {
+      return;
+    }
+
     // Creamos una sesión SNMP para cada prueba
     const options = {
       port: snmpPort,
@@ -74,12 +83,72 @@ describe('SNMP Integration Tests', () => {
     };
 
     session = netSnmp.createSession('127.0.0.1', 'public', options);
+
+    // Guardar referencia a la sesión para limpieza
+    allSessions.push(session);
   });
 
+  // Función para cerrar una sesión SNMP de forma segura
+  const closeSessionSafely = (sess) => {
+    if (!sess) return;
+
+    try {
+      // Cancelar todas las solicitudes pendientes
+      if (typeof sess.cancelRequests === 'function') {
+        sess.cancelRequests();
+      }
+
+      // Eliminar todos los listeners
+      if (typeof sess.removeAllListeners === 'function') {
+        sess.removeAllListeners();
+      }
+
+      // Intentar cerrar sockets internos
+      if (sess._socket) {
+        try {
+          if (typeof sess._socket.removeAllListeners === 'function') {
+            sess._socket.removeAllListeners();
+          }
+          if (typeof sess._socket.unref === 'function') {
+            sess._socket.unref();
+          }
+          if (typeof sess._socket.close === 'function') {
+            sess._socket.close();
+          }
+        } catch (socketErr) {
+          console.error(`Error closing session socket: ${socketErr.message}`);
+        }
+        // Forzar limpieza de referencia
+        sess._socket = null;
+      }
+
+      // Cerrar la sesión explícitamente
+      sess.close();
+
+      // Limpiar timers internos (si existen)
+      if (sess._timer) {
+        clearTimeout(sess._timer);
+        sess._timer = null;
+      }
+
+      // Limpiar referencias internas
+      if (sess._reqs) {
+        sess._reqs = {};
+      }
+    } catch (err) {
+      console.error(`Error closing SNMP session: ${err.message}`);
+    }
+  };
+
   afterEach(() => {
+    if (process.env.SKIP_INTEGRATION_TESTS) {
+      return;
+    }
+
     // Cerramos la sesión después de cada prueba
     if (session) {
-      session.close();
+      closeSessionSafely(session);
+      session = null;
     }
   });
 
@@ -87,6 +156,22 @@ describe('SNMP Integration Tests', () => {
     // No detenemos el agente si estamos saltando las pruebas
     if (process.env.SKIP_INTEGRATION_TESTS) {
       return;
+    }
+
+    // Cerrar todas las sesiones que pudieran haber quedado abiertas
+    allSessions.forEach(sess => {
+      if (sess) {
+        closeSessionSafely(sess);
+      }
+    });
+
+    // Limpiar array de sesiones
+    allSessions = [];
+
+    // Asegurarse de que la sesión principal esté cerrada
+    if (session) {
+      closeSessionSafely(session);
+      session = null;
     }
 
     // Detenemos el agente después de todas las pruebas
@@ -104,9 +189,20 @@ describe('SNMP Integration Tests', () => {
         console.log('SNMP agent stopped after integration tests');
       } catch (err) {
         console.error(`Error al detener el agente SNMP: ${err.message}`);
+        agentStarted = false;
       }
     }
-  }, 10000);
+
+    // Intentar forzar la limpieza de cualquier recurso restante
+    try {
+      // Forzar la recolección de basura si está disponible
+      if (global.gc) {
+        global.gc();
+      }
+    } catch (e) {
+      // Ignorar errores en esta etapa final
+    }
+  }, 15000);
 
   itIfNotSkipped('debe responder con un valor definido para un OID válido', (done) => {
     session.get(['1.3.6.1.4.1.12345.1.3.1.0'], (error, varbinds) => {

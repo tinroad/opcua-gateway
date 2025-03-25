@@ -117,6 +117,12 @@ class SNMPAgent {
         throw new Error("Failed to create SNMP agent");
       }
 
+      // Intentar aplicar unref a los sockets internos del agente para que no bloqueen el proceso
+      if (this.agent._udp && this.agent._udp.socket && typeof this.agent._udp.socket.unref === 'function') {
+        this.agent._udp.socket.unref();
+        logger.debug('Applied unref to SNMP agent UDP socket');
+      }
+
       // Obtener el autorizador y agregar nuestra comunidad
       const authorizer = this.agent.getAuthorizer();
       authorizer.addCommunity(this.community);
@@ -220,24 +226,170 @@ class SNMPAgent {
       }
     }, 5000);
 
+    // Marcar el intervalo como no bloqueante para que no impida que el proceso termine
+    if (this.metricsInterval.unref) {
+      this.metricsInterval.unref();
+    }
+
     logger.info('Periodic metrics updater started');
   }
 
   // Stop the SNMP agent
   stop () {
+    // Detener el intervalo de actualización de métricas primero
     if (this.metricsInterval) {
-      clearInterval(this.metricsInterval);
-      this.metricsInterval = null;
-      logger.info('Metrics updater stopped');
+      try {
+        clearInterval(this.metricsInterval);
+        this.metricsInterval = null;
+        logger.info('Metrics updater stopped manually after tests');
+      } catch (err) {
+        logger.error(`Error clearing metrics interval: ${err.message}`);
+      }
+    }
+
+    // Detener el colector de métricas del sistema
+    try {
+      metrics.stopSystemMetricsCollection();
+    } catch (err) {
+      logger.error(`Error stopping system metrics collection: ${err.message}`);
     }
 
     if (this.agent) {
       try {
-        this.agent.close();
+        // Eliminar todos los listeners para evitar fugas de memoria
+        if (typeof this.agent.removeAllListeners === 'function') {
+          this.agent.removeAllListeners();
+          logger.debug('Removed all listeners from SNMP agent');
+        }
+
+        // Obtener e intentar liberar los recursos internos del agente
+        try {
+          // Algunos agentes tienen timers internos
+          if (this.agent._timers && this.agent._timers.length) {
+            this.agent._timers.forEach(timer => {
+              if (timer && typeof timer.unref === 'function') {
+                timer.unref();
+              }
+              if (timer && typeof timer.close === 'function') {
+                timer.close();
+              }
+              if (timer && typeof clearTimeout === 'function') {
+                clearTimeout(timer);
+              }
+            });
+            this.agent._timers = [];
+            logger.debug('Cleared all internal timers in SNMP agent');
+          }
+        } catch (timerErr) {
+          logger.debug(`Could not clear timers: ${timerErr.message}`);
+        }
+
+        // Intentar cerrar cualquier socket que pueda estar abierto
+        if (this.agent._udp && this.agent._udp.socket) {
+          try {
+            // Eliminar listeners del socket
+            if (typeof this.agent._udp.socket.removeAllListeners === 'function') {
+              this.agent._udp.socket.removeAllListeners();
+              logger.debug('Removed all listeners from SNMP agent UDP socket');
+            }
+
+            // Asegurarnos de que el socket no bloqueará el proceso
+            if (typeof this.agent._udp.socket.unref === 'function') {
+              this.agent._udp.socket.unref();
+              logger.debug('Applied unref to SNMP agent UDP socket');
+            }
+
+            // Cerrar el socket
+            if (typeof this.agent._udp.socket.close === 'function') {
+              this.agent._udp.socket.close();
+              logger.debug('Closed SNMP agent UDP socket');
+            }
+          } catch (socketErr) {
+            logger.warn(`Failed to close SNMP agent UDP socket: ${socketErr.message}`);
+          } finally {
+            // Forzar la eliminación de la referencia al socket
+            if (this.agent._udp) {
+              this.agent._udp.socket = null;
+            }
+          }
+        }
+
+        // Extraer referencia a la MIB para limpiarla
+        let mib = null;
+        try {
+          mib = this.agent.getMib();
+        } catch (mibErr) {
+          logger.debug('Could not get MIB, may already be closed');
+        }
+
+        // Detener el agente para que libere el puerto
+        try {
+          this.agent.close();
+          logger.debug('SNMP agent closed successfully');
+        } catch (closeErr) {
+          logger.warn(`Error closing SNMP agent: ${closeErr.message}`);
+        }
+
+        // Limpiar la MIB si pudimos obtenerla
+        if (mib) {
+          try {
+            // Limpiar proveedores registrados
+            for (const [oidStr] of Object.entries(this.oids)) {
+              const providerName = `provider_${oidStr.replace(/\./g, '_')}`;
+              try {
+                mib.unregisterProvider(providerName);
+              } catch (providerErr) {
+                logger.debug(`Could not unregister provider ${providerName}: ${providerErr.message}`);
+              }
+            }
+          } catch (mibCleanErr) {
+            logger.debug(`Error cleaning MIB: ${mibCleanErr.message}`);
+          } finally {
+            // Forzar la eliminación de referencias internas
+            if (mib._providers) {
+              mib._providers = {};
+            }
+          }
+        }
+
+        // Intentar liberar todos los recursos internos del agente
+        try {
+          if (this.agent._authorizer) {
+            this.agent._authorizer = null;
+          }
+          if (this.agent._forwarder) {
+            this.agent._forwarder = null;
+          }
+          if (this.agent._mib) {
+            this.agent._mib = null;
+          }
+        } catch (internalErr) {
+          logger.debug(`Error clearing internal resources: ${internalErr.message}`);
+        }
+
+        // Forzar la limpieza de la referencia al agente
         this.agent = null;
+
+        // Limpiar otras referencias para ayudar al garbage collector
+        this.oids = {};
+
+        // Forzar la recolección de basura (sugerencia al motor JS)
+        if (global.gc) {
+          try {
+            global.gc();
+            logger.debug('Forced garbage collection after SNMP agent cleanup');
+          } catch (gcErr) {
+            logger.debug(`Could not force garbage collection: ${gcErr.message}`);
+          }
+        }
+
         logger.info('SNMP agent stopped');
       } catch (error) {
         logger.error(`Error stopping SNMP agent: ${error.message}`);
+
+        // Aun en caso de error, asegurarse de que las referencias se limpien
+        this.agent = null;
+        this.oids = {};
       }
     }
   }

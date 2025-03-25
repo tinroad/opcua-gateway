@@ -17,6 +17,8 @@ const TIMEOUT_MS = 5000;   // Tiempo máximo de espera por consulta
 // Variable para controlar si el agente ya se inició
 let agentStarted = false;
 let session;
+// Mantener un array de todas las sesiones creadas para asegurar la limpieza
+let allSessions = [];
 
 describe('SNMP Performance Tests', () => {
   beforeAll(async () => {
@@ -24,6 +26,9 @@ describe('SNMP Performance Tests', () => {
     if (process.env.SKIP_PERFORMANCE_TESTS) {
       return;
     }
+
+    // Limpiar array de sesiones
+    allSessions = [];
 
     // Iniciamos el agente si no está ya iniciado
     if (!agentStarted) {
@@ -50,16 +55,71 @@ describe('SNMP Performance Tests', () => {
     };
 
     session = netSnmp.createSession('127.0.0.1', 'public', options);
+
+    // Guardar referencia a la sesión para limpieza
+    allSessions.push(session);
   });
+
+  // Función para cerrar una sesión SNMP de forma segura
+  const closeSessionSafely = (sess) => {
+    if (!sess) return;
+
+    try {
+      // Cancelar todas las solicitudes pendientes
+      if (typeof sess.cancelRequests === 'function') {
+        sess.cancelRequests();
+      }
+
+      // Eliminar todos los listeners
+      if (typeof sess.removeAllListeners === 'function') {
+        sess.removeAllListeners();
+      }
+
+      // Intentar cerrar sockets internos
+      if (sess._socket) {
+        try {
+          if (typeof sess._socket.removeAllListeners === 'function') {
+            sess._socket.removeAllListeners();
+          }
+          if (typeof sess._socket.unref === 'function') {
+            sess._socket.unref();
+          }
+          if (typeof sess._socket.close === 'function') {
+            sess._socket.close();
+          }
+        } catch (socketErr) {
+          console.error(`Error closing session socket: ${socketErr.message}`);
+        }
+        // Forzar limpieza de referencia
+        sess._socket = null;
+      }
+
+      // Cerrar la sesión explícitamente
+      sess.close();
+
+      // Limpiar timers internos (si existen)
+      if (sess._timer) {
+        clearTimeout(sess._timer);
+        sess._timer = null;
+      }
+
+      // Limpiar referencias internas
+      if (sess._reqs) {
+        sess._reqs = {};
+      }
+    } catch (err) {
+      console.error(`Error closing SNMP session: ${err.message}`);
+    }
+  };
 
   afterEach(() => {
     if (process.env.SKIP_PERFORMANCE_TESTS) {
       return;
     }
 
-    // Cerrar la sesión después de cada prueba
+    // Cerrar la sesión actual después de cada prueba
     if (session) {
-      session.close();
+      closeSessionSafely(session);
       session = null;
     }
   });
@@ -69,26 +129,77 @@ describe('SNMP Performance Tests', () => {
       return;
     }
 
+    // Cerrar todas las sesiones que pudieran haber quedado abiertas
+    allSessions.forEach(sess => {
+      if (sess) {
+        closeSessionSafely(sess);
+      }
+    });
+
+    // Limpiar array de sesiones
+    allSessions = [];
+
+    // Asegurarse de que la sesión principal esté cerrada
+    if (session) {
+      closeSessionSafely(session);
+      session = null;
+    }
+
     // Detener el agente después de todas las pruebas
     if (agentStarted) {
-      await snmpAgent.stop();
-      agentStarted = false;
-      console.log('SNMP agent stopped after performance tests');
+      try {
+        await snmpAgent.stop();
+        agentStarted = false;
+        console.log('SNMP agent stopped after performance tests');
+      } catch (err) {
+        console.error(`Error stopping SNMP agent: ${err.message}`);
+        agentStarted = false;
+      }
     }
-  }, 10000);
+
+    // Intentar forzar la limpieza de cualquier recurso restante
+    try {
+      // Forzar la recolección de basura si está disponible
+      if (global.gc) {
+        global.gc();
+      }
+    } catch (e) {
+      // Ignorar errores en esta etapa final
+    }
+  }, 15000);
 
   /**
    * Función para realizar una consulta SNMP de forma prometificada
    */
   const snmpGet = (oids) => {
     return new Promise((resolve, reject) => {
-      session.get(oids, (error, varbinds) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(varbinds);
-        }
-      });
+      // Usar un ID de timeout para poder cancelarlo después
+      const timeoutId = setTimeout(() => {
+        reject(new Error('SNMP request timed out'));
+      }, TIMEOUT_MS);
+
+      // Solo intentar la consulta si la sesión está disponible
+      if (!session) {
+        clearTimeout(timeoutId);
+        return reject(new Error('SNMP session not available'));
+      }
+
+      try {
+        session.get(oids, (error, varbinds) => {
+          // Siempre limpiar el timeout
+          clearTimeout(timeoutId);
+
+          if (error) {
+            reject(error);
+          } else {
+            resolve(varbinds);
+          }
+        });
+      } catch (execError) {
+        // Capturar errores de ejecución
+        clearTimeout(timeoutId);
+        reject(execError);
+      }
     });
   };
 
@@ -117,13 +228,15 @@ describe('SNMP Performance Tests', () => {
     // Realizar todas las consultas concurrentemente
     const startTime = Date.now();
     const promises = Array(iterations).fill().map(() => makeRequest());
+
+    // Esperar a que todas las promesas se resuelvan o rechacen
     const results = await Promise.all(promises);
     const endTime = Date.now();
 
     // Analizar resultados
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
-    const timeouts = results.filter(r => !r.success && r.error && r.error.status === 'RequestTimedOut').length;
+    const timeouts = results.filter(r => !r.success && r.error && r.error.message === 'SNMP request timed out').length;
     const times = results.map(r => r.time);
     const totalTime = endTime - startTime;
 

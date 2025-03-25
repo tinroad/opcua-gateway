@@ -31,7 +31,8 @@ jest.mock('../../utils/metrics', () => ({
     freeMemory: 4191625216,
     uptime: 453.99
   },
-  updateMetrics: jest.fn()
+  updateMetrics: jest.fn(),
+  stopSystemMetricsCollection: jest.fn()
 }));
 
 // Mockear la clase SNMPAgent antes de que se instancie
@@ -216,5 +217,4 @@ describe('SNMPAgent', () => {
       expect(stopSpy).toHaveBeenCalled();
     });
   });
-}); 
 }); 

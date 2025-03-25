@@ -47,13 +47,16 @@ class MetricsCollector {
     this._httpResponseTimeAccumulator = 0;
     this._httpResponseTimeCount = 0;
 
+    // Referencia al intervalo para poder limpiarlo después
+    this._metricsInterval = null;
+
     // Start periodic system metrics collection
     this.startSystemMetricsCollection();
   }
 
   // System - Update system metrics (CPU, memory, etc.)
   startSystemMetricsCollection () {
-    setInterval(() => {
+    this._metricsInterval = setInterval(() => {
       // Update system metrics every 5 seconds
       this.updateSystemMetrics();
     }, 5000);
@@ -61,6 +64,15 @@ class MetricsCollector {
     // Update system metrics immediately
     this.updateSystemMetrics();
     logger.info('System metrics collection started');
+  }
+
+  // Detener la recolección de métricas del sistema
+  stopSystemMetricsCollection () {
+    if (this._metricsInterval) {
+      clearInterval(this._metricsInterval);
+      this._metricsInterval = null;
+      logger.info('System metrics collection stopped');
+    }
   }
 
   updateSystemMetrics () {
