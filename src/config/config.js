@@ -37,7 +37,28 @@ const CONFIG = {
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
   CORS_MAX_AGE: parseInt(process.env.CORS_MAX_AGE) || 600,
   RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 900000,
-  RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX) || 100
+  RATE_LIMIT_MAX: parseInt(process.env.RATE_LIMIT_MAX) || 100,
+
+  // Environment Configuration
+  NODE_ENV: process.env.NODE_ENV || 'development',
+
+  // SNMP Configuration
+  ENABLE_SNMP: process.env.ENABLE_SNMP === 'true',
+  SNMP_PORT: parseInt(process.env.SNMP_PORT) || 8161,
+  SNMP_VERSION: parseInt(process.env.SNMP_VERSION) || 1,
+  SNMP_COMMUNITY: process.env.SNMP_COMMUNITY || 'public',
+  SNMP_SECURITY_NAME: process.env.SNMP_SECURITY_NAME || 'opcgwuser',
+  SNMP_SECURITY_LEVEL: process.env.SNMP_SECURITY_LEVEL || 'authPriv',
+  SNMP_AUTH_PROTOCOL: process.env.SNMP_AUTH_PROTOCOL || 'SHA256',
+  SNMP_AUTH_KEY: process.env.SNMP_AUTH_KEY || 'opcgw_auth_key',
+  SNMP_PRIV_PROTOCOL: process.env.SNMP_PRIV_PROTOCOL || 'AES128',
+  SNMP_PRIV_KEY: process.env.SNMP_PRIV_KEY || 'opcgw_priv_key',
+  SNMP_USER_2_NAME: process.env.SNMP_USER_2_NAME,
+  SNMP_USER_2_LEVEL: process.env.SNMP_USER_2_LEVEL || 'authPriv',
+  SNMP_USER_2_AUTH_PROTOCOL: process.env.SNMP_USER_2_AUTH_PROTOCOL || 'SHA256',
+  SNMP_USER_2_AUTH_KEY: process.env.SNMP_USER_2_AUTH_KEY || 'user2_auth_key',
+  SNMP_USER_2_PRIV_PROTOCOL: process.env.SNMP_USER_2_PRIV_PROTOCOL || 'AES128',
+  SNMP_USER_2_PRIV_KEY: process.env.SNMP_USER_2_PRIV_KEY || 'user2_priv_key'
 };
 
 module.exports = CONFIG;

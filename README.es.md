@@ -21,6 +21,7 @@ Gateway para la comunicación con servidores OPC UA, implementado en Node.js.
 - Limitación de solicitudes
 - Protección CORS
 - Encabezados de seguridad (Helmet)
+- Monitoreo SNMP para recolección de métricas
 
 ## Estructura del Proyecto
 
@@ -98,6 +99,11 @@ ALLOWED_ORIGINS=http://localhost:3000,https://your-frontend-domain.com
 CORS_MAX_AGE=600
 RATE_LIMIT_WINDOW_MS=900000
 RATE_LIMIT_MAX=100
+
+# Configuración SNMP
+ENABLE_SNMP=true
+SNMP_PORT=161
+SNMP_COMMUNITY=public
 ```
 
 ### Características de Seguridad
@@ -156,6 +162,60 @@ El gateway soporta dos métodos de autenticación que pueden ser utilizados de f
 - Los puntos finales de configuración solo están disponibles en desarrollo
 - Bloqueo automático de solicitudes no autorizadas
 - Registro de seguridad detallado
+
+### Métricas y Monitoreo
+
+El gateway incluye un sistema completo de monitoreo que expone métricas a través de:
+
+1. **API REST**: Accede a las métricas a través de endpoints autenticados en `/api/metrics`
+
+   - `/api/metrics` - Todas las métricas
+   - `/api/metrics/opcua` - Métricas específicas de OPC UA
+   - `/api/metrics/http` - Métricas de solicitudes HTTP
+   - `/api/metrics/system` - Métricas del sistema (CPU, memoria, etc.)
+
+2. **SNMP**: Monitorea el gateway de forma remota utilizando herramientas compatibles con SNMP como Zabbix.
+
+   Cuando está habilitado, el gateway expone métricas vía SNMP en el puerto configurado (predeterminado: 161).
+   El gateway utiliza el OID empresarial `1.3.6.1.4.1.12345` y organiza las métricas de la siguiente manera:
+
+   - Métricas OPC UA: `1.3.6.1.4.1.12345.1.1.*`
+   - Métricas HTTP: `1.3.6.1.4.1.12345.1.2.*`
+   - Métricas del Sistema: `1.3.6.1.4.1.12345.1.3.*`
+
+   Para un mapeo detallado de OIDs, comprueba los logs de la aplicación al iniciar cuando SNMP está habilitado.
+
+#### Métricas Disponibles
+
+**Métricas OPC UA:**
+
+- Número de conexiones activas
+- Conteo de errores
+- Intentos de reconexión
+- Conteo de solicitudes
+- Conteo de operaciones de lectura/escritura
+- Tiempos de respuesta
+
+**Métricas HTTP:**
+
+- Conteo de solicitudes por código de estado
+- Tasas de error
+- Tiempos de respuesta
+- Bloqueos por límite de peticiones
+
+**Métricas del Sistema:**
+
+- Uso de CPU
+- Utilización de memoria
+- Tiempo de actividad
+
+#### Configuración con Zabbix
+
+1. Añade el gateway como un host SNMP en Zabbix
+2. Configura la cadena de comunidad SNMP para que coincida con la variable de entorno `SNMP_COMMUNITY`
+3. Importa la plantilla o crea elementos para cada OID de interés
+
+Habilitar el monitoreo SNMP requiere establecer `ENABLE_SNMP=true` en tu configuración de entorno.
 
 ## Endpoints de la API
 
@@ -315,17 +375,6 @@ GET /config
 ```
 
 Disponible solo en modo desarrollo.
-
-#### Respuesta
-
-```json
-{
-	"OPC_ENDPOINT": "opc.tcp://*****@127.0.0.1:4840",
-	"SERVER_PORT": 3000,
-	"LOG_LEVEL": "info"
-	// Otros valores de configuración (información sensible oculta)
-}
-```
 
 #### Respuestas de Error
 

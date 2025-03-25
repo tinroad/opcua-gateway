@@ -1,9 +1,10 @@
 const rateLimit = require('express-rate-limit');
 const logger = require('../utils/logger');
+const CONFIG = require('../config/config');
 
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutos por defecto
-  max: parseInt(process.env.RATE_LIMIT_MAX) || 100, // 100 solicitudes por ventana por defecto
+  windowMs: CONFIG.RATE_LIMIT_WINDOW_MS,
+  max: CONFIG.RATE_LIMIT_MAX,
   message: 'Too many requests from this IP, please try again later',
   handler: (req, res) => {
     logger.warn(`Rate limit exceeded for IP: ${req.ip}`);

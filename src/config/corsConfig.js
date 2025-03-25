@@ -1,9 +1,11 @@
+const CONFIG = require('./config');
+
 const corsOptions = {
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  origin: CONFIG.ALLOWED_ORIGINS,
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
   credentials: true,
-  maxAge: parseInt(process.env.CORS_MAX_AGE) || 600,
+  maxAge: CONFIG.CORS_MAX_AGE,
   exposedHeaders: ['Content-Range', 'X-Content-Range']
 };
 

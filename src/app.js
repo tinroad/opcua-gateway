@@ -8,6 +8,7 @@ const opcuaService = require('./services/opcuaService');
 const iotgatewayRoutes = require('./routes/iotgatewayRoutes');
 const healthRoutes = require('./routes/healthRoutes');
 const configRoutes = require('./routes/configRoutes');
+const metricsRoutes = require('./routes/metricsRoutes');
 const cors = require('cors');
 const morgan = require('morgan');
 const opcuaRoutes = require('./routes/opcuaRoutes');
@@ -16,6 +17,8 @@ const helmet = require('helmet');
 const corsOptions = require('./config/corsConfig');
 const rateLimiter = require('./middleware/rateLimiter');
 const combinedAuth = require('./middleware/combinedAuth');
+const metricsMiddleware = require('./middleware/metricsMiddleware');
+const snmpAgent = require('./utils/snmpAgent');
 
 const app = express();
 
@@ -28,6 +31,7 @@ app.use(rateLimiter);
 app.use(express.json());
 app.use(morgan('combined', { stream: logger.stream }));
 app.use(requestLogger);
+app.use(metricsMiddleware);
 
 // Authentication Middleware
 app.use('/iotgateway', combinedAuth);
@@ -35,9 +39,10 @@ app.use('/iotgateway', combinedAuth);
 // Routes
 app.use('/iotgateway', iotgatewayRoutes);
 app.use('/', healthRoutes);
+app.use('/api/metrics', metricsRoutes);
 
 // Configuration routes only in development
-if (process.env.NODE_ENV !== 'production') {
+if (CONFIG.NODE_ENV !== 'production') {
   app.use('/', configRoutes);
 }
 
@@ -62,15 +67,33 @@ app.use((err, req, res, next) => {
   res.status(500).send({ error: 'Internal server error' });
 });
 
+// Start the SNMP agent if enabled
+if (CONFIG.ENABLE_SNMP) {
+  logger.info('Starting SNMP agent...');
+  snmpAgent.start();
+}
+
 // Clean server shutdown handling
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM signal received, closing server...');
+
+  // Stop the SNMP agent if active
+  if (CONFIG.ENABLE_SNMP) {
+    snmpAgent.stop();
+  }
+
   await opcuaService.closeConnections();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   logger.info('SIGINT signal received, closing server...');
+
+  // Detener el agente SNMP si está activo
+  if (CONFIG.ENABLE_SNMP) {
+    snmpAgent.stop();
+  }
+
   await opcuaService.closeConnections();
   process.exit(0);
 });

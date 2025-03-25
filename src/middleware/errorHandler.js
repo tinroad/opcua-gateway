@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const CONFIG = require('../config/config');
 
 const errorHandler = (err, req, res, next) => {
   logger.error(`Error in request: ${err.message}`);
@@ -21,7 +22,7 @@ const errorHandler = (err, req, res, next) => {
   // Default error response
   res.status(500).json({
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred'
+    message: CONFIG.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred'
   });
 };
 

@@ -1,6 +1,7 @@
 const { OPCUAClient, AttributeIds, DataType } = require('node-opcua');
 const CONFIG = require('../config/config');
 const logger = require('../utils/logger');
+const metrics = require('../utils/metrics');
 
 class OPCUAService {
   constructor () {
@@ -54,10 +55,13 @@ class OPCUAService {
       // Mejorado el manejo de eventos de conexión
       client.on("backoff", (retry, delay) => {
         logger.warn(`Retrying connection to ${CONFIG.OPC_ENDPOINT}. Attempt ${retry}, delay ${delay}ms`);
+        metrics.incrementOpcuaReconnects();
       });
 
       client.on("connection_lost", async () => {
         logger.error("OPC UA connection lost. Restarting client...");
+        metrics.incrementOpcuaErrors();
+
         if (!this.isReconnecting) {
           this.isReconnecting = true;
           try {
@@ -67,6 +71,7 @@ class OPCUAService {
             await this.initOPCUAClient();
           } catch (error) {
             logger.error(`Error during reconnection: ${error.message}`);
+            metrics.incrementOpcuaErrors();
           } finally {
             this.isReconnecting = false;
           }
@@ -82,8 +87,13 @@ class OPCUAService {
         logger.debug("OPC UA keepalive received");
       });
 
+      const startTime = Date.now();
       await client.connect(CONFIG.OPC_ENDPOINT);
+      const connectionTime = Date.now() - startTime;
+      metrics.recordOpcuaResponseTime(connectionTime);
+
       logger.info("OPC UA connection established successfully");
+      metrics.incrementOpcuaConnections();
 
       const session = await client.createSession();
       logger.info("OPC UA session created successfully");
@@ -95,197 +105,223 @@ class OPCUAService {
       return { client, session };
     } catch (err) {
       logger.error(`Error initializing OPC UA client: ${err.message}`);
+      metrics.incrementOpcuaErrors();
       this.connectionRetries++;
 
       if (this.connectionRetries >= this.MAX_RETRIES) {
-        logger.error(`Maximum retry attempts reached (${this.MAX_RETRIES}). Waiting ${this.RETRY_DELAY / 1000} seconds before retrying.`);
-        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
-        this.connectionRetries = 0;
+        logger.error(`Maximum connection retries (${this.MAX_RETRIES}) reached. Giving up.`);
+        throw new Error(`Failed to connect to OPC UA server after ${this.MAX_RETRIES} attempts`);
       }
 
-      this.clientPool = null;
-      this.sessionPool = null;
-      throw err;
+      // Retry with exponential backoff
+      const delay = Math.min(this.RETRY_DELAY * Math.pow(1.5, this.connectionRetries - 1), 30000);
+      logger.info(`Retrying connection in ${delay}ms...`);
+
+      return new Promise((resolve) => {
+        setTimeout(async () => {
+          try {
+            const result = await this.initOPCUAClient();
+            resolve(result);
+          } catch (error) {
+            logger.error(`Error in retry attempt: ${error.message}`);
+            metrics.incrementOpcuaErrors();
+            resolve({ client: null, session: null });
+          }
+        }, delay);
+      });
     }
   }
 
   async readOPC (attribute) {
-    if (!attribute) {
-      logger.error("Read attempt without specifying an attribute");
-      throw new Error("Attribute not specified");
-    }
-
-    let client = null;
-    let session = null;
-    let usePooledConnection = true;
-
     try {
-      try {
-        const pooledConnection = await this.initOPCUAClient();
-        client = pooledConnection.client;
-        session = pooledConnection.session;
-      } catch (error) {
-        logger.warn("Could not use pooled connection, creating a new connection.");
-        usePooledConnection = false;
-        client = OPCUAClient.create();
-        await client.connect(CONFIG.OPC_ENDPOINT);
-        session = await client.createSession();
+      metrics.incrementOpcuaRequests();
+      metrics.incrementOpcuaReadOperations();
+
+      // Ensure we have a connection
+      if (!this.clientPool || !this.sessionPool) {
+        await this.initOPCUAClient();
       }
 
-      const nodeId = `ns=${CONFIG.OPC_NAMESPACE};s=${attribute}`;
-      logger.info(`Reading value from ${nodeId}`);
-
-      const readResult = await session.read({ nodeId });
-      logger.info(`Read from ${nodeId} completed with status: ${readResult.statusCode.name}`);
-
-      if (!usePooledConnection) {
-        await session.close();
-        await client.disconnect();
+      if (!this.sessionPool) {
+        throw new Error("No OPC UA session available");
       }
 
-      return readResult;
+      // Validate the attribute format
+      if (!attribute || typeof attribute !== 'string') {
+        throw new Error("Invalid attribute format");
+      }
+
+      logger.debug(`Reading OPC attribute: ${attribute}`);
+
+      const startTime = Date.now();
+      const result = await this.sessionPool.read({
+        nodeId: attribute,
+        attributeId: AttributeIds.Value
+      });
+      const responseTime = Date.now() - startTime;
+      metrics.recordOpcuaResponseTime(responseTime);
+
+      if (result.statusCode.isGood()) {
+        logger.debug(`Successfully read attribute ${attribute}: ${result.value.value}`);
+        return {
+          s: true,
+          v: result.value.value,
+          q: result.statusCode.name
+        };
+      } else {
+        logger.warn(`Error reading attribute ${attribute}: ${result.statusCode.description}`);
+        metrics.incrementOpcuaRequestsErrors();
+        return {
+          s: false,
+          v: null,
+          q: result.statusCode.description
+        };
+      }
     } catch (err) {
-      logger.error(`Error reading OPC UA value (${attribute}): ${err.message}`);
+      logger.error(`Exception reading OPC attribute ${attribute}: ${err.message}`);
+      metrics.incrementOpcuaRequestsErrors();
+      metrics.incrementOpcuaErrors();
 
-      if (!usePooledConnection && client && session) {
-        try {
-          await session.close();
-          await client.disconnect();
-        } catch (closeErr) {
-          logger.error(`Error closing OPC UA session: ${closeErr.message}`);
-        }
-      }
-
-      if (usePooledConnection) {
-        try {
-          if (this.sessionPool) await this.sessionPool.close();
-          if (this.clientPool) await this.clientPool.disconnect();
-        } catch (e) {
-          logger.error(`Error closing pooled connection: ${e.message}`);
-        }
-        this.clientPool = null;
-        this.sessionPool = null;
-      }
-
-      return false;
+      return {
+        s: false,
+        v: null,
+        q: err.message
+      };
     }
   }
 
   async closeConnections () {
     try {
-      logger.info('Closing OPC UA connections');
-
-      if (this.sessionPool)
+      if (this.sessionPool) {
+        logger.info("Closing OPC UA session...");
         await this.sessionPool.close();
+        this.sessionPool = null;
+      }
 
-      if (this.clientPool)
+      if (this.clientPool) {
+        logger.info("Disconnecting OPC UA client...");
         await this.clientPool.disconnect();
+        this.clientPool = null;
+        metrics.decrementOpcuaConnections();
+      }
 
-      logger.info('OPC UA connections closed');
-    } catch (error) {
-      logger.error(`Error general en closeConnections: ${error.message}`);
-      throw error;
-    } finally {
-      this.sessionPool = null;
-      this.clientPool = null;
+      logger.info("OPC UA connections closed successfully");
+      return true;
+    } catch (err) {
+      logger.error(`Error closing OPC UA connections: ${err.message}`);
+      metrics.incrementOpcuaErrors();
+      return false;
     }
   }
 
   async writeValues (writeData) {
     try {
+      metrics.incrementOpcuaRequests();
+      metrics.incrementOpcuaWriteOperations();
+
+      // Ensure we have a connection
+      if (!this.clientPool || !this.sessionPool) {
+        await this.initOPCUAClient();
+      }
+
+      if (!this.sessionPool) {
+        throw new Error("No OPC UA session available");
+      }
+
+      // Process each write request
       const results = [];
+      const startTime = Date.now();
 
       for (const item of writeData) {
-        const { id, value, dataType } = item;
-
-        const result = {
-          id: id,
-          s: false,
-          r: "Bad",
-          v: value,
-          t: Date.now()
-        };
-
         try {
-          // Detect data type
-          if (!dataType)
-            throw new Error("Data type not specified");
-          if (!DataType[dataType])
-            throw new Error(`Invalid data type: ${dataType}`);
+          if (!item.id || item.value === undefined) {
+            results.push({
+              s: false,
+              v: null,
+              r: "Invalid write data format. Must contain id and value."
+            });
+            continue;
+          }
 
-          const writeResult = await this.sessionPool.write({
-            nodeId: id,
+          const nodeId = item.id;
+          const value = this.convertValue(item.value, item.dataType);
+
+          logger.debug(`Writing value ${value} to ${nodeId}`);
+
+          const result = await this.sessionPool.write({
+            nodeId: nodeId,
             attributeId: AttributeIds.Value,
             value: {
-              value: {
-                dataType: dataType,
-                value: this.convertValue(value, dataType)
-              }
+              value: value
             }
           });
 
-          if (writeResult.name !== "Good") {
-            logger.warn(`Error writing in ${item.id}: ${writeResult.description}`);
-            result.s = false;
-            result.r = `Error: ${writeResult.description}`;
-            result.v = writeResult.value;
-
+          if (result.isGood()) {
+            results.push({
+              s: true,
+              v: item.value,
+              r: result.name
+            });
           } else {
-            logger.info(`Write in ${item.id} completed successfully`);
-            result.s = true;
-            result.r = "Good";
-            result.v = writeResult.value;
+            metrics.incrementOpcuaRequestsErrors();
+            results.push({
+              s: false,
+              v: item.value,
+              r: result.description
+            });
           }
-
-        } catch (writeError) {
-          logger.error(`Error writing in ${item.id}: ${writeError.message}`);
-          result.r = `Error: ${writeError.message}`;
+        } catch (err) {
+          logger.error(`Error writing to ${item.id}: ${err.message}`);
+          metrics.incrementOpcuaRequestsErrors();
+          results.push({
+            s: false,
+            v: item.value,
+            r: err.message
+          });
         }
-
-        results.push(result);
       }
 
+      const responseTime = Date.now() - startTime;
+      metrics.recordOpcuaResponseTime(responseTime);
+
       return results;
-    } catch (error) {
-      throw new Error(`Error writing OPC UA: ${error.message}`);
+    } catch (err) {
+      logger.error(`Exception in write operation: ${err.message}`);
+      metrics.incrementOpcuaErrors();
+      metrics.incrementOpcuaRequestsErrors();
+      return [
+        {
+          s: false,
+          v: null,
+          r: err.message
+        }
+      ];
     }
   }
 
   detectDataType (value) {
-    switch (typeof value) {
-      case 'boolean':
-        return DataType.Boolean;
-      case 'number':
-        return Number.isInteger(value) ? DataType.Int32 : DataType.Double;
-      case 'string':
-        return DataType.String;
-      default:
-        return DataType.Variant;
+    if (Number.isInteger(value)) {
+      return "Int32";
+    } else if (typeof value === "number") {
+      return "Double";
+    } else if (typeof value === "boolean") {
+      return "Boolean";
+    } else if (typeof value === "string") {
+      return "String";
+    } else {
+      return "Variant";
     }
   }
 
   convertValue (value, dataType) {
-    switch (dataType) {
-      case DataType.UInt16:
-        return parseInt(value);
-      case DataType.Int16:
-        return parseInt(value);
-      case DataType.UInt32:
-        return parseInt(value);
-      case DataType.Int32:
-        return parseInt(value);
-      case DataType.Float:
-        return parseFloat(value);
-      case DataType.Double:
-        return parseFloat(value);
-      case DataType.Boolean:
-        return Boolean(value);
-      case DataType.String:
-        return String(value);
-      default:
-        return value;
-    }
+    const type = dataType || this.detectDataType(value);
+
+    // No need for type conversion in most cases since node-opcua handles that
+    // Just return the native JavaScript value
+    return value;
   }
 }
 
-module.exports = new OPCUAService(); 
+const opcuaService = new OPCUAService();
+
+module.exports = opcuaService; 
