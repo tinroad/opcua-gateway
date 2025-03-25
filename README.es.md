@@ -185,6 +185,106 @@ El gateway incluye un sistema completo de monitoreo que expone métricas a trav�
 
    Para un mapeo detallado de OIDs, comprueba los logs de la aplicación al iniciar cuando SNMP está habilitado.
 
+#### Configuración del Agente SNMP
+
+El gateway OPC UA incluye un agente SNMP que permite monitorizar su estado a través de herramientas de monitorización como Zabbix, Nagios o cualquier otra herramienta compatible con SNMP.
+
+##### Activación del Agente SNMP
+
+Para activar el agente SNMP, establece la variable de entorno `ENABLE_SNMP=true` en tu archivo `.env`.
+
+##### Configuración SNMP
+
+El agente SNMP puede funcionar en tres modos diferentes según la versión de SNMP que se configure:
+
+###### Variables de entorno comunes
+
+```
+# Habilitar SNMP
+ENABLE_SNMP=true
+
+# Puerto del agente SNMP (por defecto: 161)
+SNMP_PORT=161
+
+# Versión SNMP: 1, 2c o 3 (por defecto: 1)
+SNMP_VERSION=3
+```
+
+###### Configuración para SNMPv1/v2c
+
+Si utilizas SNMPv1 o SNMPv2c, solo necesitas configurar la comunidad SNMP:
+
+```
+SNMP_VERSION=2c
+SNMP_COMMUNITY=public
+```
+
+###### Configuración para SNMPv3 (recomendado para producción)
+
+SNMPv3 proporciona características de seguridad adicionales, como autenticación y encriptación. Para configurar SNMPv3:
+
+```
+SNMP_VERSION=3
+
+# Usuario principal
+SNMP_SECURITY_NAME=opcgwuser
+SNMP_SECURITY_LEVEL=authPriv
+SNMP_AUTH_PROTOCOL=SHA256
+SNMP_AUTH_KEY=opcgw_auth_key
+SNMP_PRIV_PROTOCOL=AES128
+SNMP_PRIV_KEY=opcgw_priv_key
+```
+
+Donde:
+
+- `SNMP_SECURITY_NAME`: Nombre de usuario SNMPv3
+- `SNMP_SECURITY_LEVEL`: Nivel de seguridad (noAuthNoPriv, authNoPriv, authPriv)
+- `SNMP_AUTH_PROTOCOL`: Protocolo de autenticación (MD5, SHA1, SHA224, SHA256, SHA384, SHA512)
+- `SNMP_AUTH_KEY`: Contraseña de autenticación (mínimo 8 caracteres)
+- `SNMP_PRIV_PROTOCOL`: Protocolo de privacidad/encriptación (DES, AES128, AES192, AES256, AES192C, AES256C)
+- `SNMP_PRIV_KEY`: Contraseña de privacidad (mínimo 8 caracteres)
+
+###### Usuario adicional (opcional)
+
+También puedes configurar un segundo usuario SNMPv3:
+
+```
+SNMP_USER_2_NAME=zabbix
+SNMP_USER_2_LEVEL=authPriv
+SNMP_USER_2_AUTH_PROTOCOL=SHA1
+SNMP_USER_2_AUTH_KEY=zabbix_auth_key
+SNMP_USER_2_PRIV_PROTOCOL=AES256
+SNMP_USER_2_PRIV_KEY=zabbix_priv_key
+```
+
+##### Monitoreo con Zabbix
+
+Se proporciona una plantilla de Zabbix para monitorear fácilmente el gateway OPC UA. Para generar la plantilla:
+
+```
+npm run generate:zabbix
+```
+
+La plantilla se guarda en `tools/zabbix_template.xml` y se puede importar directamente en Zabbix.
+
+###### Opciones de Seguridad SNMP en la Plantilla Zabbix
+
+Puedes personalizar la configuración de seguridad SNMP al generar la plantilla:
+
+```
+# Generar plantilla con SNMPv2c
+node src/tools/generateZabbixTemplate.js --version 2c
+
+# Generar plantilla con SNMPv3 personalizado
+node src/tools/generateZabbixTemplate.js --version 3 --user zabbix --level authPriv --auth SHA1 --priv AES256
+```
+
+Para más opciones:
+
+```
+node src/tools/generateZabbixTemplate.js --help
+```
+
 #### Métricas Disponibles
 
 **Métricas OPC UA:**
@@ -208,6 +308,40 @@ El gateway incluye un sistema completo de monitoreo que expone métricas a trav�
 - Uso de CPU
 - Utilización de memoria
 - Tiempo de actividad
+
+##### Detalle de OIDs
+
+**OPC UA**
+
+- `1.3.6.1.4.1.12345.1.1.1` - Número de conexiones OPC UA
+- `1.3.6.1.4.1.12345.1.1.2` - Número de errores OPC UA
+- `1.3.6.1.4.1.12345.1.1.3` - Número de reconexiones OPC UA
+- `1.3.6.1.4.1.12345.1.1.4` - Número de solicitudes OPC UA
+- `1.3.6.1.4.1.12345.1.1.5` - Número de errores en solicitudes OPC UA
+- `1.3.6.1.4.1.12345.1.1.6` - Número de operaciones de lectura OPC UA
+- `1.3.6.1.4.1.12345.1.1.7` - Número de operaciones de escritura OPC UA
+- `1.3.6.1.4.1.12345.1.1.8` - Último tiempo de respuesta OPC UA (ms)
+- `1.3.6.1.4.1.12345.1.1.9` - Tiempo de respuesta promedio OPC UA (ms)
+
+**HTTP**
+
+- `1.3.6.1.4.1.12345.1.2.1` - Número de solicitudes HTTP
+- `1.3.6.1.4.1.12345.1.2.2` - Número de errores HTTP
+- `1.3.6.1.4.1.12345.1.2.3` - Número de respuestas HTTP 2xx
+- `1.3.6.1.4.1.12345.1.2.4` - Número de respuestas HTTP 3xx
+- `1.3.6.1.4.1.12345.1.2.5` - Número de respuestas HTTP 4xx
+- `1.3.6.1.4.1.12345.1.2.6` - Número de respuestas HTTP 5xx
+- `1.3.6.1.4.1.12345.1.2.7` - Último tiempo de respuesta HTTP (ms)
+- `1.3.6.1.4.1.12345.1.2.8` - Tiempo de respuesta promedio HTTP (ms)
+- `1.3.6.1.4.1.12345.1.2.9` - Número de limitaciones de tasa
+
+**Sistema**
+
+- `1.3.6.1.4.1.12345.1.3.1` - Uso de CPU (%)
+- `1.3.6.1.4.1.12345.1.3.2` - Uso de memoria (%)
+- `1.3.6.1.4.1.12345.1.3.3` - Memoria total (bytes)
+- `1.3.6.1.4.1.12345.1.3.4` - Memoria libre (bytes)
+- `1.3.6.1.4.1.12345.1.3.5` - Tiempo de actividad del servidor (segundos)
 
 #### Configuración con Zabbix
 
