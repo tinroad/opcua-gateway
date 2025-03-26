@@ -90,32 +90,65 @@ graph TD
 
 ## Inicio Rápido (Docker)
 
-La forma más sencilla de empezar:
+La forma más rápida y recomendada para ejecutar el gateway usando Docker y la imagen oficial de Docker Hub:
 
-1.  **Clonar el repositorio:**
-    ```bash
-    git clone https://github.com/tinroad/opcua-gateway.git
-    cd opcua-gateway
+1.  **Crear archivo `docker-compose.yml`:**
+    Crea un archivo llamado `docker-compose.yml` en una carpeta de tu elección con el siguiente contenido:
+
+    ```yaml
+    version: '3.8'
+    services:
+      opcua-gateway:
+        image: exacross/opcua-gateway:latest # Utiliza la imagen de Docker Hub
+        container_name: opcua-gw
+        ports:
+          - '3000:3000' # Mapea el puerto del host al contenedor
+        env_file:
+          - .env # Carga variables de entorno desde el archivo .env
+        restart: unless-stopped
+        # Opcional: Montar volumen para certificados si usas modos seguros
+        # volumes:
+        #   - ./certificates:/app/certificates
     ```
-2.  **Configurar el entorno:**
-    ```bash
-    cp .env.example .env
+
+2.  **Crear archivo `.env`:**
+    En la misma carpeta donde creaste `docker-compose.yml`, crea un archivo llamado `.env`. Copia y pega las variables de configuración necesarias desde la sección [Variables de Entorno](#variables-de-entorno). **Como mínimo, necesitas configurar:**
+
+    ```env
+    # Obligatorias para la conexión básica
+    OPC_ENDPOINT=opc.tcp://TU_SERVIDOR_OPCUA:4840
+
+    # Obligatorias para la seguridad de la API (elige una o ambas)
+    API_KEY=UNA_CLAVE_API_SEGURA_AQUI
+    # o
+    AUTH_USERNAME=tu_usuario_basic
+    AUTH_PASSWORD=tu_password_basic
+
+    # Recomendadas (ajusta según necesidad)
+    LOG_LEVEL=info
+    LOG_TO_CONSOLE=true
+    # ... otras variables que necesites modificar ...
     ```
-    Edita `.env` y **establece al menos** las siguientes variables esenciales:
-    - `OPC_ENDPOINT`: La URL de tu servidor OPC UA (ej. `opc.tcp://192.168.1.100:4840`).
-    - `API_KEY`: Una clave segura para la autenticación por API Key.
-    - `AUTH_USERNAME` y `AUTH_PASSWORD`: Credenciales para la autenticación Básica.
-3.  **Levantar con Docker Compose:**
+
+    _Reemplaza los valores de ejemplo con tu configuración real._
+
+3.  **Iniciar el Contenedor:**
+    Abre una terminal en la carpeta donde creaste los archivos y ejecuta:
+
     ```bash
     docker-compose up -d
     ```
-4.  **Verificar estado:** Abre tu navegador o usa `curl` para comprobar el endpoint de salud:
+
+    Docker descargará (`pull`) automáticamente la imagen `exacross/opcua-gateway:latest` si no la tienes localmente y luego iniciará el contenedor.
+
+4.  **Verificar estado:**
+    Espera unos segundos y comprueba el endpoint de salud:
     ```bash
     curl http://localhost:3000/health
     # Deberías ver una respuesta JSON indicando el estado "UP" y "CONNECTED"
     ```
 
-¡Listo! El gateway está funcionando en `http://localhost:3000`.
+¡Listo! El gateway está funcionando y accesible en `http://localhost:3000`, usando la imagen oficial y tu configuración local.
 
 ---
 

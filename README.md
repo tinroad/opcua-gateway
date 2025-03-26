@@ -90,32 +90,65 @@ graph TD
 
 ## Quick Start (Docker)
 
-The easiest way to get started:
+The fastest and recommended way to run the gateway using Docker and the official Docker Hub image:
 
-1.  **Clone the repository:**
-    ```bash
-    git clone [https://github.com/tinroad/opcua-gateway.git](https://github.com/tinroad/opcua-gateway.git)
-    cd opcua-gateway
+1.  **Create `docker-compose.yml` file:**
+    Create a file named `docker-compose.yml` in a folder of your choice with the following content:
+
+    ```yaml
+    version: '3.8'
+    services:
+      opcua-gateway:
+        image: exacross/opcua-gateway:latest # Use the image from Docker Hub
+        container_name: opcua-gw
+        ports:
+          - '3000:3000' # Map host port to container port
+        env_file:
+          - .env # Load environment variables from .env file
+        restart: unless-stopped
+        # Optional: Mount volume for certificates if using secure modes
+        # volumes:
+        #   - ./certificates:/app/certificates
     ```
-2.  **Configure the environment:**
-    ```bash
-    cp .env.example .env
+
+2.  **Create `.env` file:**
+    In the same folder where you created `docker-compose.yml`, create a file named `.env`. Copy and paste the necessary configuration variables from the [Environment Variables](#environment-variables) section. **At a minimum, you need to configure:**
+
+    ```env
+    # Required for basic connection
+    OPC_ENDPOINT=opc.tcp://YOUR_OPCUA_SERVER:4840
+
+    # Required for API security (choose one or both)
+    API_KEY=A_SECURE_API_KEY_HERE
+    # or
+    AUTH_USERNAME=your_basic_user
+    AUTH_PASSWORD=your_basic_password
+
+    # Recommended (adjust as needed)
+    LOG_LEVEL=info
+    LOG_TO_CONSOLE=true
+    # ... other variables you need to modify ...
     ```
-    Edit `.env` and **set at least** the following essential variables:
-    - `OPC_ENDPOINT`: The URL of your OPC UA server (e.g., `opc.tcp://192.168.1.100:4840`).
-    - `API_KEY`: A secure key for API Key authentication.
-    - `AUTH_USERNAME` and `AUTH_PASSWORD`: Credentials for Basic authentication.
-3.  **Start with Docker Compose:**
+
+    _Replace the example values with your actual configuration._
+
+3.  **Start the Container:**
+    Open a terminal in the folder where you created the files and run:
+
     ```bash
     docker-compose up -d
     ```
-4.  **Verify status:** Open your browser or use `curl` to check the health endpoint:
+
+    Docker will automatically download (`pull`) the `exacross/opcua-gateway:latest` image if you don't have it locally and then start the container.
+
+4.  **Verify Status:**
+    Wait a few seconds and check the health endpoint:
     ```bash
     curl http://localhost:3000/health
     # You should see a JSON response indicating "UP" and "CONNECTED" status
     ```
 
-Done! The gateway is running at `http://localhost:3000`.
+Done! The gateway is running and accessible at `http://localhost:3000`, using the official image and your local configuration.
 
 ---
 
@@ -161,7 +194,7 @@ docker run -d \
 
 ```bash
 # 1. Clone the repository (if you haven't already)
-git clone [https://github.com/tinroad/opcua-gateway.git](https://github.com/tinroad/opcua-gateway.git)
+git clone https://github.com/tinroad/opcua-gateway
 cd opcua-gateway
 
 # 2. Install dependencies
