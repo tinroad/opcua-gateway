@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1](https://github.com/tinroad/opcua-gateway/compare/v1.0.0...v1.0.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **auth:** fail closed when credentials are missing ([df24b61](https://github.com/tinroad/opcua-gateway/commit/df24b61bff0ea411424230607e2c81866d8ee417))
+* **auth:** fail closed when credentials are missing ([e66706d](https://github.com/tinroad/opcua-gateway/commit/e66706d35a7a0415b136c18ef4a7840919f9f655))
+* **ci:** align Node runtime and Husky setup ([e3c9087](https://github.com/tinroad/opcua-gateway/commit/e3c9087eb689430400d60c3b8312031fd9a69c8e))
+
 ## 1.0.0 (2025-03-25)
 
 
