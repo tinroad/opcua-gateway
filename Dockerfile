@@ -1,10 +1,13 @@
-FROM node:18-alpine
+FROM node:22-alpine
+
+ENV NODE_ENV=production
 
 # Crear directorio de aplicación
 WORKDIR /usr/src/app
 
 # Instalar dependencias
 COPY package*.json ./
+COPY .husky/install.mjs ./.husky/install.mjs
 RUN npm install --omit=dev
 
 # Copiar código fuente

@@ -36,7 +36,7 @@ graph TD
 - **IT/OT Integration:** Facilitates the connection between the operational technology (OT) world and information technology (IT) systems.
 - **Centralized Security:** Manage OPC UA connection security and API security in one place.
 - **Standard Monitoring:** Use SNMP (v1/v2c/v3) and/or the REST API to monitor the gateway's status and performance.
-- **Compatibility:** `/iotgateway` endpoints designed to ease migration from or coexistence with Kepware IoT Gateway.
+- **Compatibility:** `/api/iotgateway` endpoints designed to ease migration from or coexistence with Kepware IoT Gateway.
 - **Open Source:** Completely free, open-source code (MIT License) with the possibility to contribute.
 - **Modern and Lightweight:** Built with Node.js, ideal for efficient deployments.
 
@@ -74,8 +74,8 @@ graph TD
   - [Monitoring with Zabbix](#monitoring-with-zabbix)
   - [Available Metrics](#available-metrics)
 - [API Endpoints](#api-endpoints)
-  - [Read OPC UA values (`/iotgateway`)](#read-opc-ua-values-iotgateway)
-  - [Write OPC UA values (`/iotgateway`)](#write-opc-ua-values-iotgateway)
+  - [Read OPC UA values (`/api/iotgateway`)](#read-opc-ua-values-apiiotgateway)
+  - [Write OPC UA values (`/api/iotgateway`)](#write-opc-ua-values-apiiotgateway)
   - [Other API Endpoints (`/api`)](#other-api-endpoints-api)
 - [Project Structure](#project-structure)
 - [Error Handling](#error-handling)
@@ -132,6 +132,12 @@ The fastest and recommended way to run the gateway using Docker and the official
 
     _Replace the example values with your actual configuration._
 
+    > Authentication is mandatory. Configure a non-empty `API_KEY`, or configure
+    > both `AUTH_USERNAME` and `AUTH_PASSWORD`. If neither method is complete,
+    > the gateway exits before opening the HTTP listener. Keep `.env` out of
+    > version control and do not store production credentials in
+    > `docker-compose.yml`.
+
 3.  **Start the Container:**
     Open a terminal in the folder where you created the files and run:
 
@@ -144,7 +150,9 @@ The fastest and recommended way to run the gateway using Docker and the official
 4.  **Verify Status:**
     Wait a few seconds and check the health endpoint:
     ```bash
-    curl http://localhost:3000/health
+    curl -H "X-API-Key: A_SECURE_API_KEY_HERE" http://localhost:3000/health
+    # Or with Basic Auth:
+    # curl -u "your_basic_user:your_basic_password" http://localhost:3000/health
     # You should see a JSON response indicating "UP" and "CONNECTED" status
     ```
 
@@ -156,7 +164,7 @@ Done! The gateway is running and accessible at `http://localhost:3000`, using th
 
 - 🔐 **Secure Connection:** Support for different OPC UA security modes and policies.
 - 🚀 **Modern REST API:** Intuitive endpoints for reading and writing OPC UA values.
-- 🤝 **Kepware Compatibility:** `/iotgateway` endpoints for easy integration/migration.
+- 🤝 **Kepware Compatibility:** `/api/iotgateway` endpoints for easy integration/migration.
 - 🔗 **Connection Pooling:** Efficient management of OPC UA sessions.
 - 🔄 **Automatic Reconnection:** Robust handling of disconnections with configurable retries.
 - 🛡️ **Complete API Security:** Dual authentication (Basic/API Key), Rate Limiting, CORS, Helmet.
@@ -211,7 +219,7 @@ npm run dev
 ### Native Production Deployment
 
 ```bash
-# 1. Make sure you have Node.js >= 14.0.0 on your server
+# 1. Make sure you have Node.js >= 20.0.0 on your server
 
 # 2. Clone or copy the source code to your server
 
@@ -233,7 +241,12 @@ npm start
 
 ### Environment Variables
 
-The gateway is fully configured via environment variables defined in a `.env` file in the project root. Copy `.env.example` to get started.
+The gateway is fully configured via environment variables defined in a `.env`
+file in the project root. Copy `.env.example` to get started. Authentication is
+required at startup: set a non-empty `API_KEY`, or set both `AUTH_USERNAME` and
+`AUTH_PASSWORD`. The process exits with a configuration error when neither
+method is complete. The repository's `docker-compose.yml` forwards these values
+from the shell or `.env` file and does not provide default secrets.
 
 ```env
 # === Core OPC UA Configuration ===
@@ -260,7 +273,10 @@ CONNECTION_RETRY_DELAY=5000                # Base delay between retries (ms)
 SERVER_PORT=3000                           # Port the gateway will listen on
 
 # === API Security Configuration ===
+# Configure at least one complete authentication method:
+# Option A: API key
 API_KEY=your_api_key_here                  # Secret key for X-API-Key authentication
+# Option B: Basic Authentication (both values are required)
 AUTH_USERNAME=admin                        # User for Basic Authentication
 AUTH_PASSWORD=your_secure_password         # Password for Basic Authentication
 ALLOWED_ORIGINS=http://localhost:3000,[https://your-frontend-domain.com](https://your-frontend-domain.com) # Allowed CORS origins (comma-separated)
@@ -300,26 +316,33 @@ Security is paramount. This gateway implements several layers:
 
 ### API Authentication Methods
 
-You can protect the `/iotgateway` and `/api` endpoints using one or both methods simultaneously:
+All HTTP endpoints exposed by the application, including `/health`, are
+protected by the global authentication middleware. Configure at least one of
+the following methods; both may be enabled simultaneously:
 
 1.  **Basic Authentication:**
 
     - Uses username and password (`AUTH_USERNAME`, `AUTH_PASSWORD`).
+    - Enabled only when both values are non-empty.
     - Ideal for quick tests or human access.
     - Example with `curl`:
       ```bash
-      curl -X GET "http://localhost:3000/iotgateway/read?ids=ns=2;s=MiVariable" \
+      curl -X GET "http://localhost:3000/api/iotgateway/read?ids=MiVariable" \
            -u "admin:your_secure_password"
       ```
 
 2.  **API Key Authentication:**
     - Uses a secret key (`API_KEY`) sent in the `X-API-Key` header.
+    - Enabled only when `API_KEY` is non-empty.
     - Recommended for machine-to-machine (M2M) communication.
     - Example with `curl`:
       ```bash
-      curl -X GET "http://localhost:3000/iotgateway/read?ids=ns=2;s=MiVariable" \
+      curl -X GET "http://localhost:3000/api/iotgateway/read?ids=MiVariable" \
            -H "X-API-Key: your_api_key_here"
       ```
+
+Missing, empty, malformed, or invalid credentials receive `401 Unauthorized`
+and never reach the OPC UA routes.
 
 ### Rate Limiting
 
@@ -390,21 +413,21 @@ Check the logs on startup with SNMP enabled or the source code for a detailed OI
 
 ## API Endpoints
 
-### Read OPC UA values (`/iotgateway`)
+### Read OPC UA values (`/api/iotgateway`)
 
 ```http
-GET /iotgateway/read?ids=<node-id1>,<node-id2>,...
+GET /api/iotgateway/read?ids=<node-id>
 ```
 
 - **Authentication:** Basic Auth (`-u user:pass`) OR API Key (`-H "X-API-Key: key"`).
 - **Query Parameters:**
-  - `ids` (required): One or more OPC UA Node IDs, comma-separated. (E.g., `ns=2;s=MyVariable,ns=3;i=1001`)
+  - `ids` (required): A string Node ID. The gateway applies the namespace configured in `OPC_NAMESPACE`. (E.g., `MyVariable`)
 - **Successful Response (200 OK):**
   ```json
   {
   	"readResults": [
   		{
-  			"id": "ns=2;s=MyVariable",
+			"id": "MyVariable",
   			"s": true, // Success (OPC UA status code)
   			"r": "Good", // Reason / Status description
   			"v": "123.45", // Read value
@@ -417,14 +440,14 @@ GET /iotgateway/read?ids=<node-id1>,<node-id2>,...
 - **Error Response (e.g., 400 Bad Request if `ids` is missing):**
   ```json
   {
-  	"error": "Parameter 'ids' is required"
+	"error": "ID is required"
   }
   ```
 
-### Write OPC UA values (`/iotgateway`)
+### Write OPC UA values (`/api/iotgateway`)
 
 ```http
-POST /iotgateway/write
+POST /api/iotgateway/write
 Content-Type: application/json
 ```
 
@@ -433,12 +456,12 @@ Content-Type: application/json
   ```json
   [
   	{
-  		"id": "ns=2;s=MyVariable",
+		"id": "MyVariable",
   		"value": "NewValue"
   		// "dataType": "String" // Optional: Specify OPC UA data type (e.g., Double, Int32, Boolean)
   	},
   	{
-  		"id": "ns=3;i=1002",
+		"id": "OtherVariable",
   		"value": true,
   		"dataType": "Boolean"
   	}
@@ -448,11 +471,11 @@ Content-Type: application/json
 - **Successful Response (200 OK):**
   ```json
   {
-  	"writeResults": [
-  		{
-  			"id": "ns=2;s=MyVariable",
-  			"success": true,
-  			"message": "Good" // OPC UA status of the write operation
+	"writeResults": [
+		{
+			"s": true,
+			"v": "NewValue",
+			"r": "Good" // OPC UA status of the write operation
   		}
   		// ... more results
   	]
@@ -461,7 +484,7 @@ Content-Type: application/json
 - **Error Response (e.g., 400 Bad Request if body is invalid):**
   ```json
   {
-  	"error": "Invalid or empty request body"
+	"error": "The request body must be an array of values to write"
   }
   ```
 
@@ -470,13 +493,16 @@ Content-Type: application/json
 These endpoints provide additional functionality or direct access (require authentication):
 
 - `GET /api/opcua/status`: OPC UA connection status.
-- `GET /api/opcua/read/:nodeId`: Direct read of a single node (URL-encoded ID).
+- `GET /api/opcua/nodes/:nodeId/read`: Direct read of a single node (URL-encoded ID).
+- `POST /api/opcua/read`: Read a string node using `{"namespace": ..., "nodeId": ...}`.
 - `POST /api/opcua/write/:nodeId`: Direct write to a single node (URL-encoded ID, value in JSON body `{"value": ...}`).
 - `GET /api/metrics/...`: Detailed metrics endpoints.
 
-### Public Endpoint
+### Protected Health Endpoint
 
-- `GET /health`: Basic health status of the gateway (no authentication required). Ideal for load balancers or service checks.
+- `GET /health`: Basic gateway health status. It requires the same API key or
+  Basic credentials as every other HTTP endpoint; configure health checks and
+  load balancers accordingly.
   ```json
   {
   	"status": "UP",
@@ -540,7 +566,7 @@ project/
 
 ## Requirements
 
-- Node.js >= 14.0.0
+- Node.js >= 20.0.0
 - Accessible OPC UA server on the network.
 - (Optional) Valid OPC UA certificates if using Sign or SignAndEncrypt security modes.
 - (Recommended) Docker and Docker Compose for easy deployment.
