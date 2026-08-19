@@ -13,6 +13,9 @@ services:
       - OPC_SECURITY_POLICY=None
       - OPC_NAMESPACE=2
       - SERVER_PORT=3000
+      - API_KEY=${API_KEY:-}
+      - AUTH_USERNAME=${AUTH_USERNAME:-admin}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-}
       - LOG_LEVEL=info
       - LOG_FILE_ERROR=/logs/error.log
       - LOG_FILE_COMBINED=/logs/combined.log

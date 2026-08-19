@@ -1,7 +1,11 @@
-const app = require('./app');
 const CONFIG = require('./config/config');
+const combinedAuth = require('./middleware/combinedAuth');
+
+combinedAuth.assertAuthenticationConfigured();
+
 const logger = require('./utils/logger');
 const opcuaService = require('./services/opcuaService');
+const app = require('./app');
 
 const PORT = CONFIG.SERVER_PORT;
 
@@ -15,4 +19,4 @@ app.listen(PORT, async () => {
   } catch (err) {
     logger.warn(`Could not establish initial OPC UA connection: ${err.message}`);
   }
-}); 
+});
