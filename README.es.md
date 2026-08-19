@@ -219,7 +219,7 @@ npm run dev
 ### Despliegue en Producción Nativo
 
 ```bash
-# 1. Asegúrate de tener Node.js >= 14.0.0 en tu servidor
+# 1. Asegúrate de tener Node.js >= 20.0.0 en tu servidor
 
 # 2. Clona o copia el código fuente en tu servidor
 
@@ -567,7 +567,7 @@ project/
 
 ## Requisitos
 
-- Node.js >= 14.0.0
+- Node.js >= 20.0.0
 - Servidor OPC UA accesible en la red.
 - (Opcional) Certificados OPC UA válidos si usas modos de seguridad Sign o SignAndEncrypt.
 - (Recomendado) Docker y Docker Compose para despliegue fácil.
